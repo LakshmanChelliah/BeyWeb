@@ -1,0 +1,15 @@
+{
+  "name": "beyweb",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "color-leone": "node scripts/color-rock-leone.mjs",
+    "recolor-leone": "node scripts/recolor-leone-top.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Spin Sumo — Beyblade Arena</title>
+  <link rel="stylesheet" href="css/game.css" />
+</head>
+<body class="mobile">
+
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud">
+    <div class="hud-panel">
+      <img class="hud-avatar" id="player-avatar" src="MeteoLdragoLogo.png" alt="" />
+      <div class="hud-info">
+        <div class="hud-label">You — Spin</div>
+        <div class="hud-value" id="player-spin">100%</div>
+        <div class="hud-bar-wrap"><div class="hud-bar" id="player-bar" style="width:100%"></div></div>
+      </div>
+    </div>
+    <div class="hud-panel hud-side-ai">
+      <img class="hud-avatar" id="ai-avatar" src="pegasusLogo.png" alt="" />
+      <div class="hud-info">
+        <div class="hud-label">Rival — Spin</div>
+        <div class="hud-value" id="ai-spin">100%</div>
+        <div class="hud-bar-wrap"><div class="hud-bar" id="ai-bar" style="width:100%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tilt-hint">Tilt phone to steer · Tap a move button to unleash a gimmick</div>
+
+  <div id="player-abilities" class="ability-bar ability-bar-right"></div>
+
+  <div id="special-flash"><img id="special-flash-img" alt="" /></div>
+
+  <div id="select-overlay"></div>
+
+  <div id="start-overlay">
+    <div class="logo-ring"></div>
+    <h1>Spin Sumo</h1>
+    <p>Tilt your phone to steer your bey into the rival. Knock them out through a stadium pocket to win!</p>
+    <button id="btn-start">Calibrate &amp; Start</button>
+    <p id="permission-hint">Requires motion sensor access on iOS. Hold phone flat when starting.</p>
+  </div>
+
+  <div id="gameover-overlay">
+    <h2 id="gameover-title">KNOCKOUT!</h2>
+    <p id="gameover-msg">You win!</p>
+    <button id="btn-restart">Play Again</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+
+  <script type="module" src="js/main-mobile.js"></script>
+</body>
+</html>
