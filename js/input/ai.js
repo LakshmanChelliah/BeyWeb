@@ -4,14 +4,28 @@ import { applySteerForce, computeSteerForce } from '../physics/steer.js';
 
 const _force = new CANNON.Vec3();
 
-/** Per-tier tuning — opponent index 0 is easiest; one tier per campaign stage. */
+/** Per-tier tuning — tier index 0 is easiest. */
 const AI_TIERS = [
-  { forceMult: 0.78, decisionInterval: 0.34, specialReach: 3.8, powerReach: 6.0 },  // Dark Bull
-  { forceMult: 0.92, decisionInterval: 0.26, specialReach: 4.6, powerReach: 7.0 },  // Flame Libra
-  { forceMult: 1.05, decisionInterval: 0.20, specialReach: 5.4, powerReach: 8.0 },  // Rock Leone
-  { forceMult: 1.18, decisionInterval: 0.16, specialReach: 6.2, powerReach: 9.0 },  // Storm Pegasus
-  { forceMult: 1.32, decisionInterval: 0.12, specialReach: 7.2, powerReach: 10.0 }, // Meteo L-Drago
+  { forceMult: 0.78, decisionInterval: 0.34, specialReach: 3.8, powerReach: 6.0 },
+  { forceMult: 0.92, decisionInterval: 0.26, specialReach: 4.6, powerReach: 7.0 },
+  { forceMult: 1.05, decisionInterval: 0.20, specialReach: 5.4, powerReach: 8.0 },
+  { forceMult: 1.18, decisionInterval: 0.16, specialReach: 6.2, powerReach: 9.0 },
+  { forceMult: 1.32, decisionInterval: 0.12, specialReach: 7.2, powerReach: 10.0 },
 ];
+
+export const AI_TIER_MAX = AI_TIERS.length - 1;
+
+export const AI_DIFFICULTIES = Object.freeze([
+  { tier: 0, label: 'Easy' },
+  { tier: 1, label: 'Normal' },
+  { tier: 2, label: 'Hard' },
+  { tier: 3, label: 'Expert' },
+  { tier: 4, label: 'Extreme' },
+]);
+
+export function getDifficultyLabel(tier) {
+  return AI_DIFFICULTIES[Math.max(0, Math.min(tier, AI_TIER_MAX))]?.label ?? 'Normal';
+}
 
 let _tier = 1;
 let _decisionT = 0;

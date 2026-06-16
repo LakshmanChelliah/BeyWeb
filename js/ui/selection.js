@@ -14,14 +14,21 @@ import { ABILITY_REGISTRY } from '../game/abilities.js';
  * @param {(picks:object[]) => void} opts.onComplete
  */
 export function createBeySelection({ root, players, onComplete, rivalLabel = null }) {
+  const ROSTER = BEYS.filter(isBeyPlayable);
   const locked = new Set();
   const picks = [];
   let turn = 0;
   let rivalPick = null;
-  const firstPlayable = BEYS.findIndex(isBeyPlayable);
-  let currentIndex = firstPlayable >= 0 ? firstPlayable : 0;
+  let currentIndex = 0;
 
-  root.innerHTML = `
+  let mount = root.querySelector('.select-mount');
+  if (!mount) {
+    mount = document.createElement('div');
+    mount.className = 'select-mount';
+    root.appendChild(mount);
+  }
+
+  mount.innerHTML = `
     <div class="select-header">
       <h1 class="select-title"></h1>
       <p class="select-sub">Choose your bey</p>
@@ -35,12 +42,12 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
     <div class="select-picks"></div>
   `;
 
-  const titleEl = root.querySelector('.select-title');
-  const carousel = root.querySelector('.carousel-container');
-  const indicators = root.querySelector('.carousel-indicators');
-  const prevBtn = root.querySelector('.carousel-arrow.left');
-  const nextBtn = root.querySelector('.carousel-arrow.right');
-  const picksEl = root.querySelector('.select-picks');
+  const titleEl = mount.querySelector('.select-title');
+  const carousel = mount.querySelector('.carousel-container');
+  const indicators = mount.querySelector('.carousel-indicators');
+  const prevBtn = mount.querySelector('.carousel-arrow.left');
+  const nextBtn = mount.querySelector('.carousel-arrow.right');
+  const picksEl = mount.querySelector('.select-picks');
 
   const statRow = (label, value) => `
     <div class="bey-stat">
@@ -70,7 +77,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
     return `<span>${letter}</span>`;
   };
 
-  const cards = BEYS.map((bey, i) => {
+  const cards = ROSTER.map((bey, i) => {
     const item = document.createElement('div');
     item.className = 'bey-item';
     item.dataset.index = String(i);
@@ -86,9 +93,8 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
           ${statRow('STAMINA', bey.sta)}
         </div>
         ${movesBlock(bey)}
-        <button class="bey-select-btn" type="button">${isBeyPlayable(bey) ? 'SELECT' : 'LOCKED'}</button>
+        <button class="bey-select-btn" type="button">SELECT</button>
         <div class="bey-taken">TAKEN</div>
-        ${isBeyPlayable(bey) ? '' : '<div class="bey-soon">COMING SOON</div>'}
       </div>`;
     carousel.appendChild(item);
 
@@ -112,17 +118,16 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
   const dots = Array.from(indicators.children);
 
   function nextOpenIndex(from) {
-    for (let step = 0; step < BEYS.length; step++) {
-      const idx = (from + step) % BEYS.length;
-      const bey = BEYS[idx];
-      if (isBeyPlayable(bey) && !locked.has(bey.id)) return idx;
+    for (let step = 0; step < ROSTER.length; step++) {
+      const idx = (from + step) % ROSTER.length;
+      if (!locked.has(ROSTER[idx].id)) return idx;
     }
     return from;
   }
 
   function confirmPick(i) {
-    const bey = BEYS[i];
-    if (!isBeyPlayable(bey) || locked.has(bey.id) || turn >= players.length) return;
+    const bey = ROSTER[i];
+    if (locked.has(bey.id) || turn >= players.length) return;
 
     locked.add(bey.id);
     picks.push(bey);
@@ -135,16 +140,16 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       return;
     }
 
-    currentIndex = nextOpenIndex((i + 1) % BEYS.length);
+    currentIndex = nextOpenIndex((i + 1) % ROSTER.length);
     render();
   }
 
   function render() {
-    const total = BEYS.length;
+    const total = ROSTER.length;
     const radius = Math.max(360, total * 95);
 
     cards.forEach((item, i) => {
-      const bey = BEYS[i];
+      const bey = ROSTER[i];
       const angle = (i - currentIndex) * (360 / total);
       const rad = angle * (Math.PI / 180);
       const x = Math.sin(rad) * radius;
@@ -161,13 +166,10 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       const card = item.querySelector('.bey-card');
       const btn = item.querySelector('.bey-select-btn');
       const taken = locked.has(bey.id);
-      const playable = isBeyPlayable(bey);
       card.classList.toggle('active', isCenter);
       card.classList.toggle('taken', taken);
-      btn.disabled = !playable || taken || !isCenter;
-      if (!playable) btn.textContent = 'LOCKED';
-      else if (taken) btn.textContent = 'TAKEN';
-      else btn.textContent = 'SELECT';
+      btn.disabled = taken || !isCenter;
+      btn.textContent = taken ? 'TAKEN' : 'SELECT';
     });
 
     dots.forEach((d, i) => d.classList.toggle('on', i === currentIndex));
@@ -193,18 +195,19 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
         ? (() => {
             const chip = rivalPick
               ? `<span class="pick-bey" style="--bey-color:${rivalPick.color}">${rivalPick.name}</span>`
-              : `<span class="pick-bey empty">— choosing —</span>`;
-            return `<div class="pick-slot${rivalPick ? '' : ' active'}"><span class="pick-label">${rivalLabel}</span>${chip}</div>`;
+              : `<span class="pick-bey empty">random</span>`;
+            const sub = rivalPick ? '' : '<span class="pick-sub">rolled after you select</span>';
+            return `<div class="pick-slot rival-slot"><span class="pick-label">${rivalLabel}</span>${chip}${sub}</div>`;
           })()
         : '');
   }
 
   prevBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + BEYS.length) % BEYS.length;
+    currentIndex = (currentIndex - 1 + ROSTER.length) % ROSTER.length;
     render();
   });
   nextBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % BEYS.length;
+    currentIndex = (currentIndex + 1) % ROSTER.length;
     render();
   });
 
@@ -222,7 +225,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       picks.length = 0;
       rivalPick = null;
       turn = 0;
-      currentIndex = nextOpenIndex(firstPlayable >= 0 ? firstPlayable : 0);
+      currentIndex = nextOpenIndex(0);
       root.classList.remove('select-done');
       render();
     },

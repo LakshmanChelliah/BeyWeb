@@ -17,6 +17,16 @@ export function getAiTierForOpponentId(opponentId) {
   return idx >= 0 ? idx : CAMPAIGN_OPPONENT_IDS.length - 1;
 }
 
+/** Random rival from the tournament roster (excludes the player's bey). */
+export function pickRandomRival(excludeBey) {
+  const excludeId = typeof excludeBey === 'string' ? excludeBey : excludeBey?.id;
+  const pool = CAMPAIGN_OPPONENT_IDS.map((id) => getBeyById(id)).filter(
+    (b) => b && b.id !== excludeId
+  );
+  if (pool.length === 0) return getBeyById(CAMPAIGN_OPPONENT_IDS[0]);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 const WINS_NEEDED = 2;
 
 export function createCampaign() {
@@ -24,6 +34,7 @@ export function createCampaign() {
   let playerWins = 0;
   let cpuWins = 0;
   let active = false;
+  let currentOpponentId = null;
 
   return {
     start() {
@@ -31,6 +42,7 @@ export function createCampaign() {
       playerWins = 0;
       cpuWins = 0;
       active = true;
+      currentOpponentId = null;
     },
 
     reset() {
@@ -38,6 +50,7 @@ export function createCampaign() {
       playerWins = 0;
       cpuWins = 0;
       active = false;
+      currentOpponentId = null;
     },
 
     isActive() {
@@ -52,7 +65,12 @@ export function createCampaign() {
       return opponentIndex;
     },
 
+    setOpponent(bey) {
+      currentOpponentId = bey?.id ?? null;
+    },
+
     getCurrentOpponent() {
+      if (currentOpponentId) return getBeyById(currentOpponentId);
       return getBeyById(CAMPAIGN_OPPONENT_IDS[opponentIndex]);
     },
 
@@ -81,6 +99,7 @@ export function createCampaign() {
       opponentIndex += 1;
       playerWins = 0;
       cpuWins = 0;
+      currentOpponentId = null;
       return true;
     },
 

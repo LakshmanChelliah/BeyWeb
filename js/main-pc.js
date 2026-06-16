@@ -2,16 +2,14 @@ import { createGame } from './game/engine.js';
 import { createKeyboardInput } from './input/keyboard.js';
 import { applyAISteering, tickAIAbilities, resetAIController } from './input/ai.js';
 import { createBeySelection } from './ui/selection.js';
+import { createPlaySetup } from './ui/playSetup.js';
 import { queryGameUi } from './ui/domRefs.js';
 import { createCampaignController } from './game/campaignController.js';
 import { GAME_MODES, isVsCpu, modeBlurb } from './game/modes.js';
 
 const startOverlay = document.getElementById('start-overlay');
 const selectOverlay = document.getElementById('select-overlay');
-const modeBar = document.getElementById('pc-mode-bar');
-const modeCasualBtn = document.getElementById('mode-casual');
-const modeTourneyBtn = document.getElementById('mode-tournament');
-const mode2pBtn = document.getElementById('mode-2-player');
+const playSetupEl = document.getElementById('play-setup');
 const startBlurb = document.getElementById('start-blurb');
 const startKeys = document.getElementById('start-keys');
 const controlsHint = document.getElementById('controls-hint');
@@ -20,6 +18,7 @@ const aiHudLabel = document.getElementById('ai-hud-label');
 const btnStart = document.getElementById('btn-start');
 
 let gameMode = GAME_MODES.TOURNAMENT;
+let difficulty = 1;
 let beysChosen = false;
 let gameRef = null;
 let selection = null;
@@ -30,18 +29,30 @@ const campaignCtrl = createCampaignController({
   gameoverMsg: document.getElementById('gameover-msg'),
   btnRestart: document.getElementById('btn-restart'),
   isEnabled: () => isVsCpu(gameMode),
+  getPlayerBey: () => gameRef?.state.playerBey,
   onOpponentChange(opp) {
     gameRef.state.aiBey = opp;
     selection.setRivalPick(opp);
   },
 });
 
+const playSetup = createPlaySetup(playSetupEl, {
+  show2Player: true,
+  onChange({ mode, difficulty: diff }) {
+    gameMode = mode;
+    difficulty = diff;
+    beysChosen = false;
+    btnStart.disabled = true;
+    campaignCtrl.resetCampaign();
+    applyModeUi();
+    selection.reset(getPlayers());
+    selection.setRivalLabel(isVsCpu(gameMode) ? 'RIVAL' : null);
+  },
+});
+
 function getPlayers() {
   if (gameMode === GAME_MODES.TWO_PLAYER) {
     return [{ label: 'PLAYER 1' }, { label: 'PLAYER 2' }];
-  }
-  if (gameMode === GAME_MODES.CASUAL) {
-    return [{ label: 'YOU' }, { label: 'OPPONENT' }];
   }
   return [{ label: 'YOU' }];
 }
@@ -51,10 +62,6 @@ function applyModeUi() {
 
   document.body.classList.toggle('vs-cpu', vsCpu);
   document.body.classList.toggle('vs-2p', gameMode === GAME_MODES.TWO_PLAYER);
-
-  modeCasualBtn?.classList.toggle('active', gameMode === GAME_MODES.CASUAL);
-  modeTourneyBtn?.classList.toggle('active', gameMode === GAME_MODES.TOURNAMENT);
-  mode2pBtn?.classList.toggle('active', gameMode === GAME_MODES.TWO_PLAYER);
 
   if (playerHudLabel) playerHudLabel.textContent = vsCpu ? 'You — Spin' : 'P1 — Spin';
   if (aiHudLabel) aiHudLabel.textContent = vsCpu ? 'CPU — Spin' : 'P2 — Spin';
@@ -71,28 +78,17 @@ function applyModeUi() {
   campaignCtrl.updateHud();
 }
 
-function setMode(mode) {
-  if (gameMode === mode) return;
-  gameMode = mode;
-  beysChosen = false;
-  btnStart.disabled = true;
-  campaignCtrl.resetCampaign();
-  applyModeUi();
-  selection.reset(getPlayers());
-  selection.setRivalLabel(gameMode === GAME_MODES.TOURNAMENT ? 'CPU' : null);
-}
-
 function openBeySelect() {
   campaignCtrl.resetCampaign();
   resetAIController();
   selection.reset(getPlayers());
-  selection.setRivalLabel(gameMode === GAME_MODES.TOURNAMENT ? 'CPU' : null);
+  selection.setRivalLabel(isVsCpu(gameMode) ? 'CPU' : null);
   gameRef.returnToMenu();
   selectOverlay.classList.remove('hidden');
+  startOverlay.classList.add('hidden');
   document.getElementById('campaign-hud')?.classList.add('hidden');
   beysChosen = false;
   btnStart.disabled = true;
-  modeBar?.classList.remove('hidden');
 }
 
 const keyboard = createKeyboardInput(
@@ -153,12 +149,15 @@ selection = createBeySelection({
   root: selectOverlay,
   players: getPlayers(),
   onComplete(picks) {
+    const { mode, difficulty: diff } = playSetup.getState();
+    gameMode = mode;
+    difficulty = diff;
+
     gameRef.state.playerBey = picks[0];
     if (gameMode === GAME_MODES.TOURNAMENT) {
-      campaignCtrl.startTournament();
+      campaignCtrl.startTournament(picks[0], difficulty);
     } else if (gameMode === GAME_MODES.CASUAL) {
-      gameRef.state.aiBey = picks[1];
-      campaignCtrl.startCasual(picks[1]);
+      campaignCtrl.startCasual(picks[0], difficulty);
     } else {
       gameRef.state.aiBey = picks[1];
       campaignCtrl.resetCampaign();
@@ -166,17 +165,16 @@ selection = createBeySelection({
     beysChosen = true;
     btnStart.disabled = false;
     resetAIController();
+    applyModeUi();
     setTimeout(() => {
       selectOverlay.classList.add('hidden');
-      modeBar?.classList.add('hidden');
+      startOverlay.classList.remove('hidden');
     }, 600);
   },
 });
 
-modeCasualBtn?.addEventListener('click', () => setMode(GAME_MODES.CASUAL));
-modeTourneyBtn?.addEventListener('click', () => setMode(GAME_MODES.TOURNAMENT));
-mode2pBtn?.addEventListener('click', () => setMode(GAME_MODES.TWO_PLAYER));
-
+({ mode: gameMode, difficulty } = playSetup.getState());
 applyModeUi();
-selection.setRivalLabel('CPU');
+selection.setRivalLabel('RIVAL');
 btnStart.disabled = true;
+startOverlay.classList.add('hidden');

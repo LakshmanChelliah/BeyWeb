@@ -167,5 +167,5 @@ export function getBeyById(id) {
 }
 
 export function isBeyPlayable(bey) {
-  return Boolean(bey?.available);
+  return Boolean(bey?.available && bey.atk != null);
 }
