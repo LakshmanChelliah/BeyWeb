@@ -244,7 +244,16 @@ kbd {
   margin-bottom: 28px;
 }
 
-#btn-restart {
+.gameover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: min(100%, 280px);
+}
+
+#btn-restart,
+.gameover-btn-secondary {
   appearance: none;
   border: 2px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
@@ -254,15 +263,109 @@ kbd {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #e8ecf4;
-  background: rgba(255, 255, 255, 0.08);
   border-radius: 50px;
   transition: background 0.15s, transform 0.15s;
   touch-action: manipulation;
 }
 
-#btn-restart:active {
+#btn-restart {
+  background: rgba(37, 99, 235, 0.35);
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.gameover-btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#btn-restart:active,
+.gameover-btn-secondary:active {
   transform: scale(0.96);
-  background: rgba(255, 255, 255, 0.15);
+}
+
+#btn-restart:active {
+  background: rgba(37, 99, 235, 0.5);
+}
+
+.gameover-btn-secondary:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+#btn-restart:disabled,
+.gameover-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* ---------- PC mode toggle (VS CPU / 2 Players) ---------- */
+.pc-mode-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(8, 12, 28, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  border-radius: 50px;
+}
+.pc-mode-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.pc-mode-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a8cb8;
+  background: transparent;
+  border-radius: 50px;
+  transition: color 0.15s, background 0.15s;
+}
+.pc-mode-btn:hover {
+  color: #c8d4f0;
+}
+.pc-mode-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #4f8cff);
+  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.4);
+}
+
+body.vs-cpu #p2-abilities {
+  display: none !important;
+}
+
+.campaign-hud {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c8d4f0;
+  background: rgba(8, 12, 28, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(120, 160, 255, 0.22);
+  border-radius: 50px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.campaign-hud.hidden {
+  display: none;
 }
 
 /* ---------- Bey selection screen ---------- */
@@ -484,8 +587,8 @@ kbd {
   box-shadow: 0 0 22px -4px rgba(239, 68, 68, 0.55);
 }
 .bey-emblem-img--ldrago {
-  width: 94%;
-  height: 94%;
+  width: 86%;
+  height: 86%;
   filter:
     contrast(1.22)
     saturate(1.1)

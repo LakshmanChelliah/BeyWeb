@@ -13,10 +13,11 @@ import { ABILITY_REGISTRY } from '../game/abilities.js';
  * @param {{label:string}[]} opts.players  Pickers, in turn order.
  * @param {(picks:object[]) => void} opts.onComplete
  */
-export function createBeySelection({ root, players, onComplete }) {
+export function createBeySelection({ root, players, onComplete, rivalLabel = null }) {
   const locked = new Set();
   const picks = [];
   let turn = 0;
+  let rivalPick = null;
   const firstPlayable = BEYS.findIndex(isBeyPlayable);
   let currentIndex = firstPlayable >= 0 ? firstPlayable : 0;
 
@@ -177,16 +178,25 @@ export function createBeySelection({ root, players, onComplete }) {
       titleEl.textContent = 'BATTLE READY';
     }
 
-    picksEl.innerHTML = players
-      .map((p, i) => {
-        const pick = picks[i];
-        const active = i === turn ? ' active' : '';
-        const chip = pick
-          ? `<span class="pick-bey" style="--bey-color:${pick.color}">${pick.name}</span>`
-          : `<span class="pick-bey empty">— choosing —</span>`;
-        return `<div class="pick-slot${active}"><span class="pick-label">${p.label}</span>${chip}</div>`;
-      })
-      .join('');
+    picksEl.innerHTML =
+      players
+        .map((p, i) => {
+          const pick = picks[i];
+          const active = i === turn ? ' active' : '';
+          const chip = pick
+            ? `<span class="pick-bey" style="--bey-color:${pick.color}">${pick.name}</span>`
+            : `<span class="pick-bey empty">— choosing —</span>`;
+          return `<div class="pick-slot${active}"><span class="pick-label">${p.label}</span>${chip}</div>`;
+        })
+        .join('') +
+      (rivalLabel
+        ? (() => {
+            const chip = rivalPick
+              ? `<span class="pick-bey" style="--bey-color:${rivalPick.color}">${rivalPick.name}</span>`
+              : `<span class="pick-bey empty">— choosing —</span>`;
+            return `<div class="pick-slot${rivalPick ? '' : ' active'}"><span class="pick-label">${rivalLabel}</span>${chip}</div>`;
+          })()
+        : '');
   }
 
   prevBtn.addEventListener('click', () => {
@@ -204,6 +214,28 @@ export function createBeySelection({ root, players, onComplete }) {
     /** Returns remaining (unlocked, playable) beys — handy for an AI auto-pick. */
     remaining() {
       return BEYS.filter((b) => isBeyPlayable(b) && !locked.has(b.id));
+    },
+    /** Restart picks (e.g. when switching VS CPU / 2-player). */
+    reset(newPlayers) {
+      players.splice(0, players.length, ...newPlayers);
+      locked.clear();
+      picks.length = 0;
+      rivalPick = null;
+      turn = 0;
+      currentIndex = nextOpenIndex(firstPlayable >= 0 ? firstPlayable : 0);
+      root.classList.remove('select-done');
+      render();
+    },
+    /** Show which bey the CPU / rival auto-picked. */
+    setRivalPick(bey) {
+      rivalPick = bey;
+      render();
+    },
+    /** Toggle the extra rival slot (VS CPU on PC). */
+    setRivalLabel(label) {
+      rivalLabel = label;
+      rivalPick = null;
+      render();
     },
   };
 }

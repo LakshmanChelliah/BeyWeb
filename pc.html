@@ -12,9 +12,9 @@
 
   <div id="hud">
     <div class="hud-panel">
-      <img class="hud-avatar" id="player-avatar" src="MeteoLdragoLogo.png" alt="" />
+      <img class="hud-avatar" id="player-avatar" src="updatedLdragoLogo.png" alt="" />
       <div class="hud-info">
-        <div class="hud-label">P1 — Spin</div>
+        <div class="hud-label" id="player-hud-label">P1 — Spin</div>
         <div class="hud-value" id="player-spin">100%</div>
         <div class="hud-bar-wrap"><div class="hud-bar" id="player-bar" style="width:100%"></div></div>
       </div>
@@ -22,7 +22,7 @@
     <div class="hud-panel hud-side-ai">
       <img class="hud-avatar" id="ai-avatar" src="pegasusLogo.png" alt="" />
       <div class="hud-info">
-        <div class="hud-label">P2 — Spin</div>
+        <div class="hud-label" id="ai-hud-label">P2 — Spin</div>
         <div class="hud-value" id="ai-spin">100%</div>
         <div class="hud-bar-wrap"><div class="hud-bar" id="ai-bar" style="width:100%"></div></div>
       </div>
@@ -30,6 +30,13 @@
   </div>
 
   <div id="controls-hint">P1: Arrows · . power · / special &nbsp;|&nbsp; P2: WASD · Q power · E special</div>
+
+  <div id="campaign-hud" class="campaign-hud hidden" aria-live="polite"></div>
+
+  <div id="pc-mode-bar" class="pc-mode-bar">
+    <button type="button" id="mode-vs-cpu" class="pc-mode-btn active">VS CPU</button>
+    <button type="button" id="mode-2-player" class="pc-mode-btn">2 Players</button>
+  </div>
 
   <div id="p1-abilities" class="ability-bar ability-bar-left"></div>
   <div id="p2-abilities" class="ability-bar ability-bar-right"></div>
@@ -41,8 +48,8 @@
   <div id="start-overlay">
     <div class="logo-ring"></div>
     <h1>Spin Sumo</h1>
-    <p>Two-player local battle. P1 uses arrow keys, P2 uses WASD. Launch the other bey out through a KO pocket to win!</p>
-    <div class="key-hints">
+    <p id="start-blurb">Two-player local battle. P1 uses arrow keys, P2 uses WASD. Launch the other bey out through a KO pocket to win!</p>
+    <div class="key-hints" id="start-keys">
       <kbd>&uarr;</kbd>
       <kbd>&larr;</kbd>
       <kbd>&darr;</kbd>
@@ -60,7 +67,10 @@
   <div id="gameover-overlay">
     <h2 id="gameover-title">KNOCKOUT!</h2>
     <p id="gameover-msg">You win!</p>
-    <button id="btn-restart">Play Again</button>
+    <div class="gameover-actions">
+      <button id="btn-restart" type="button">Play Again</button>
+      <button id="btn-change-bey" type="button" class="gameover-btn-secondary">Change Bey</button>
+    </div>
   </div>
 
   <script type="importmap">

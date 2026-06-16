@@ -31,20 +31,23 @@ import {
   tickAbilityVisuals,
   tickLeoneAbilityVisuals,
   tickLdragoAbilityVisuals,
+  tickLibraAbilityVisuals,
   getCameraCue,
   resetStarBlastCamera,
   shouldStarBlastGlow,
   clearAbilityFlags,
+  isLibraBusterChannelingBody,
 } from './abilities.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
 import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
 import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
+import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
 
 /**
  * Boots the shared game engine for PC (2-player) or mobile (gyro + AI).
  */
-export function createGame({ mode, canvas, ui, input }) {
+export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   const state = createGameState();
   const { renderer, scene, camera } = createScene(canvas);
   const { world, topMaterial, bowlMaterial, wallMaterial } = createPhysicsWorld();
@@ -67,6 +70,10 @@ export function createGame({ mode, canvas, ui, input }) {
   const ldragoVfx = {
     player: createLdragoAbilityVfx(scene),
     ai: createLdragoAbilityVfx(scene),
+  };
+  const libraVfx = {
+    player: createLibraAbilityVfx(scene),
+    ai: createLibraAbilityVfx(scene),
   };
   const contacts = setupContactHandlers(world, () => state);
 
@@ -112,6 +119,8 @@ export function createGame({ mode, canvas, ui, input }) {
     gameoverOverlay: ui.gameoverOverlay,
     btnStart: ui.btnStart,
     btnRestart: ui.btnRestart,
+    btnChangeBey: ui.btnChangeBey || null,
+    btnRecalibrate: ui.btnRecalibrate || null,
     playerSpinEl: ui.playerSpinEl,
     aiSpinEl: ui.aiSpinEl,
     playerBar: ui.playerBar,
@@ -128,11 +137,11 @@ export function createGame({ mode, canvas, ui, input }) {
 
   const clock = new THREE.Clock();
 
-  // Keyboard hint shown on each ability button (PC has two human players).
-  const ABILITY_KEY_LABELS =
-    mode === 'pc'
-      ? { player: { power: '.', special: '/' }, ai: { power: 'Q', special: 'E' } }
-      : { player: {}, ai: {} };
+  function abilityKeyLabels() {
+    if (mode !== 'pc') return { player: {}, ai: {} };
+    if (isVsCpu?.()) return { player: { power: '.', special: '/' }, ai: {} };
+    return { player: { power: '.', special: '/' }, ai: { power: 'Q', special: 'E' } };
+  }
   const abilityButtons = { player: [], ai: [] };
 
   function buildAbilityButtons(side) {
@@ -153,7 +162,7 @@ export function createGame({ mode, canvas, ui, input }) {
       btn.className = `ability-btn slot-${slotName}`;
       btn.type = 'button';
       btn.style.setProperty('--ability-glow', ability.glow || '#4f8cff');
-      const keyLabel = ABILITY_KEY_LABELS[side]?.[slotName];
+      const keyLabel = abilityKeyLabels()[side]?.[slotName];
       btn.innerHTML =
         `<span class="ability-cd"></span>` +
         `<span class="ability-icon">${ability.icon || ''}</span>` +
@@ -170,7 +179,8 @@ export function createGame({ mode, canvas, ui, input }) {
     for (const side of ['player', 'ai']) {
       for (const { btn, slot, cdEl } of abilityButtons[side]) {
         const ability = slot.ability;
-        const ratio = ability.cooldown ? slot.cooldownRemaining / ability.cooldown : 0;
+        const total = slot.cooldownTotal || ability.cooldown || 0;
+        const ratio = total ? slot.cooldownRemaining / total : 0;
         cdEl.style.transform = `scaleY(${Math.max(0, Math.min(1, ratio))})`;
         btn.classList.toggle('cooling', slot.cooldownRemaining > 0);
         btn.classList.toggle('active', slot.active || slot.windupRemaining > 0);
@@ -213,6 +223,13 @@ export function createGame({ mode, canvas, ui, input }) {
         const intensity = repulse > 0 ? Math.max(base, 2.0 + repulse * 1.1) : base;
         return { color: sp.ability.glow, intensity };
       }
+      if (sp.ability.id === 'libra_sonic_buster') {
+        const body = side === 'player' ? state.playerBody : state.aiBody;
+        const channeling = body?.userData.sonicBusterWindup || body?.userData.sonicBuster;
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.02);
+        const base = channeling ? pulse * 1.45 : pulse * 0.65;
+        return { color: sp.ability.glow, intensity: base };
+      }
       return { color: sp.ability.glow, intensity: 1.0 };
     }
     const pw = runtime.power;
@@ -231,6 +248,14 @@ export function createGame({ mode, canvas, ui, input }) {
         const pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.012);
         const base = pulse * 1.05;
         const intensity = burst > 0 ? Math.max(base, 1.4 + burst * 0.8) : base;
+        return { color: pw.ability.glow, intensity };
+      }
+      if (pw.ability.id === 'libra_sonic_shield') {
+        const body = side === 'player' ? state.playerBody : state.aiBody;
+        const burst = body?.userData.sonicShieldBurstT ?? 0;
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.01);
+        const base = pulse * 1.1;
+        const intensity = burst > 0 ? Math.max(base, 1.35 + burst * 0.65) : base;
         return { color: pw.ability.glow, intensity };
       }
       return { color: pw.ability.glow, intensity: 0.55 };
@@ -312,11 +337,13 @@ export function createGame({ mode, canvas, ui, input }) {
     ldragoVfx.ai.reset();
     dom.specialFlash?.classList.remove('flash-play');
 
-    const copy = formatEndGame(result, mode);
+    const endMode = mode === 'pc' && isVsCpu?.() ? 'pc-cpu' : mode;
+    const copy = formatEndGame(result, endMode);
     dom.gameoverTitle.textContent = copy.title;
     dom.gameoverTitle.className = copy.titleClass;
     dom.gameoverMsg.textContent = copy.message;
     dom.gameoverOverlay.classList.add('visible');
+    input.onMatchEnd?.(result);
   }
 
   function spawnTops() {
@@ -388,6 +415,17 @@ export function createGame({ mode, canvas, ui, input }) {
 
     loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
     loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
+  }
+
+  function returnToMenu() {
+    state.gameRunning = false;
+    state.gameFrozen = false;
+    dom.gameoverOverlay.classList.remove('visible');
+    dom.hud.classList.remove('visible');
+    dom.controlsHint?.classList.remove('visible');
+    dom.startOverlay.classList.remove('hidden');
+    dom.btnStart.disabled = false;
+    input.clearKeys?.();
   }
 
   function resetGame() {
@@ -468,16 +506,38 @@ export function createGame({ mode, canvas, ui, input }) {
         state.accumulator -= CONFIG.FIXED_DT;
       }
 
+      const playerSandMult =
+        state.playerBody?.userData.sonicSlow > 0 &&
+        !isLibraBusterChannelingBody(state, state.playerBody)
+          ? 2
+          : 1;
+      const aiSandMult =
+        state.aiBody?.userData.sonicSlow > 0 &&
+        !isLibraBusterChannelingBody(state, state.aiBody)
+          ? 2
+          : 1;
+
       state.playerSpin = state.playerBody?.userData.controlLocked
         ? state.playerSpin
-        : decaySpin(state.playerSpin, dt, state.playerBey.sta ?? 50);
+        : decaySpin(
+            state.playerSpin,
+            dt,
+            state.playerBey.sta ?? 50,
+            playerSandMult
+          );
       state.aiSpin = state.aiBody?.userData.controlLocked
         ? state.aiSpin
-        : decaySpin(state.aiSpin, dt, state.aiBey.sta ?? 50);
+        : decaySpin(
+            state.aiSpin,
+            dt,
+            state.aiBey.sta ?? 50,
+            aiSandMult
+          );
       tickAbilityTimers(state, dt);
       tickAbilityVisuals(state, dt);
       tickLeoneAbilityVisuals(state, dt);
       tickLdragoAbilityVisuals(state, dt);
+      tickLibraAbilityVisuals(state, dt);
       trackSleepers(state);
       updateHud();
       updateAbilityHud();
@@ -520,15 +580,19 @@ export function createGame({ mode, canvas, ui, input }) {
     speedBoostVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     ldragoVfx.player.update(playerGroup, state.playerBody, camera, dt);
     ldragoVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    libraVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    libraVfx.ai.update(aiGroup, state.aiBody, camera, dt);
 
     updateCamera(camera, state, mode, getCameraCue(state, dt));
     renderer.render(scene, camera);
   }
 
   dom.btnStart.addEventListener('click', () => input.onStartClick?.(startGame) ?? startGame());
-  dom.btnRestart.addEventListener('click', resetGame);
+  dom.btnRestart.addEventListener('click', () => input.onRestart?.(resetGame) ?? resetGame());
+  dom.btnChangeBey?.addEventListener('click', () => input.onChangeBey?.());
+  dom.btnRecalibrate?.addEventListener('click', () => input.onRecalibrate?.(resetGame));
 
   gameLoop();
 
-  return { state, startGame, resetGame, spawnTops, triggerAbility, playerGroup, aiGroup };
+  return { state, startGame, resetGame, returnToMenu, spawnTops, triggerAbility, playerGroup, aiGroup };
 }

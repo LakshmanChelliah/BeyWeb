@@ -3,15 +3,26 @@ import { clamp01 } from '../utils/math.js';
 import { CONFIG } from '../config.js';
 import { LEONE_WALL_DURATION } from '../game/abilities.js';
 
-function makeMat(color, opacity, { additive = false } = {}) {
+function makeMat(color, opacity, { additive = false, doubleSide = false } = {}) {
   return new THREE.MeshBasicMaterial({
     color,
     transparent: true,
     opacity,
     depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    side: THREE.DoubleSide,
+    // Billboarded quads face the camera — FrontSide halves fragment cost vs DoubleSide.
+    side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
   });
+}
+
+/** Reuse materials by color/blend mode to cut draw-call batch breaks. */
+function createMatCache() {
+  const cache = new Map();
+  return (color, additive = false, doubleSide = false) => {
+    const key = `${color}|${additive ? 1 : 0}|${doubleSide ? 1 : 0}`;
+    if (!cache.has(key)) cache.set(key, makeMat(color, 0, { additive, doubleSide }));
+    return cache.get(key);
+  };
 }
 
 // Anchor — still a subtle green dig-in cue (power move only).
@@ -31,10 +42,11 @@ const TORNADO_BASE_R = 1.1;
 const TORNADO_TOP_R = 2.9;
 const WALL_ACTIVE_DUR = LEONE_WALL_DURATION;
 
-const DUST_SPECK_COUNT = 140;
-const MIST_WISP_COUNT = 55;
-const DEBRIS_CHUNK_COUNT = 48;
-const WIND_STREAK_COUNT = 36;
+// Tuned down from 279 total — each particle was a separate draw call.
+const DUST_SPECK_COUNT = 72;
+const MIST_WISP_COUNT = 28;
+const DEBRIS_CHUNK_COUNT = 24;
+const WIND_STREAK_COUNT = 20;
 
 const DUST_COLORS = [DUST_LIGHT, DUST_MID, DUST_DARK, DEBRIS_TAN, DEBRIS_DARK];
 const MIST_COLORS = [MIST_WHITE, HAZE_GREY, DUST_LIGHT];
@@ -55,6 +67,7 @@ function buildParticleTraits(count, kind) {
       orbitSpeed: 0.7 + rand(s + 3) * 1.4,
       radiusJitter: 0.82 + rand(s + 4) * 0.36,
       riseSpeed: 0.35 + rand(s + 5) * 0.9,
+      sizeTier: Math.floor(rand(s + 6) * 3),
       size: kind === 'dust'
         ? 0.022 + rand(s + 6) * 0.05
         : kind === 'mist'
@@ -73,25 +86,47 @@ function buildParticleTraits(count, kind) {
   return traits;
 }
 
+const DUST_GEOS = [
+  new THREE.PlaneGeometry(0.03, 0.028),
+  new THREE.PlaneGeometry(0.045, 0.04),
+  new THREE.PlaneGeometry(0.06, 0.052),
+];
+const MIST_GEOS = [
+  new THREE.PlaneGeometry(0.05, 0.12),
+  new THREE.PlaneGeometry(0.08, 0.2),
+  new THREE.PlaneGeometry(0.11, 0.28),
+];
+const DEBRIS_GEOS = [
+  new THREE.PlaneGeometry(0.04, 0.03),
+  new THREE.PlaneGeometry(0.06, 0.045),
+  new THREE.PlaneGeometry(0.08, 0.06),
+];
+const STREAK_GEOS = [
+  new THREE.PlaneGeometry(0.02, 0.1),
+  new THREE.PlaneGeometry(0.028, 0.14),
+  new THREE.PlaneGeometry(0.035, 0.18),
+];
+
 /**
  * Per-bey Three.js VFX for Rock Leone's two abilities.
  */
 export function createLeoneAbilityVfx(scene) {
   const root = new THREE.Group();
   scene.add(root);
+  const getMat = createMatCache();
 
   // --- Anchor (unchanged green dig-in) ----------------------------------------
   const anchorRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.8, 1.1, 40),
-    makeMat(ANCHOR_GREEN, 0, { additive: true })
+    new THREE.RingGeometry(0.8, 1.1, 24),
+    getMat(ANCHOR_GREEN, true)
   );
   anchorRing.rotation.x = -Math.PI / 2;
   anchorRing.renderOrder = 3;
   root.add(anchorRing);
 
   const shockRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.9, 1.05, 40),
-    makeMat(ANCHOR_GREEN, 0, { additive: true })
+    new THREE.RingGeometry(0.9, 1.05, 24),
+    getMat(ANCHOR_GREEN, true)
   );
   shockRing.rotation.x = -Math.PI / 2;
   shockRing.renderOrder = 2;
@@ -101,7 +136,7 @@ export function createLeoneAbilityVfx(scene) {
   for (let i = 0; i < 4; i++) {
     const m = new THREE.Mesh(
       new THREE.PlaneGeometry(0.22, 0.55),
-      makeMat(ANCHOR_GREEN, 0, { additive: true })
+      getMat(ANCHOR_GREEN, true)
     );
     m.renderOrder = 4;
     root.add(m);
@@ -114,36 +149,34 @@ export function createLeoneAbilityVfx(scene) {
   const tornadoGroup = new THREE.Group();
   root.add(tornadoGroup);
 
-  function spawnPool(count, kind, geometryFactory) {
+  const GEO_BY_KIND = {
+    dust: DUST_GEOS,
+    mist: MIST_GEOS,
+    debris: DEBRIS_GEOS,
+    streak: STREAK_GEOS,
+  };
+
+  function spawnPool(count, kind) {
     const traits = buildParticleTraits(count, kind);
     const pool = [];
+    const colors = kind === 'mist' ? MIST_COLORS : DUST_COLORS;
+    const geos = GEO_BY_KIND[kind];
     for (let i = 0; i < count; i++) {
-      const colors = kind === 'mist' ? MIST_COLORS : DUST_COLORS;
-      const mat = makeMat(
-        colors[traits[i].colorIdx],
-        0,
-        { additive: kind === 'mist' }
-      );
-      const mesh = new THREE.Mesh(geometryFactory(traits[i]), mat);
+      const tr = traits[i];
+      const mat = getMat(colors[tr.colorIdx], kind === 'mist');
+      const mesh = new THREE.Mesh(geos[tr.sizeTier], mat);
       mesh.renderOrder = kind === 'mist' ? 6 : kind === 'debris' ? 4 : 5;
+      mesh.visible = false;
       tornadoGroup.add(mesh);
-      pool.push({ mesh, traits: traits[i], kind });
+      pool.push({ mesh, traits: tr, kind });
     }
     return pool;
   }
 
-  const dustPool = spawnPool(DUST_SPECK_COUNT, 'dust', (t) =>
-    new THREE.PlaneGeometry(t.size, t.size * (0.8 + t.layer * 0.4))
-  );
-  const mistPool = spawnPool(MIST_WISP_COUNT, 'mist', (t) =>
-    new THREE.PlaneGeometry(t.size * 0.6, t.size * 1.6)
-  );
-  const debrisPool = spawnPool(DEBRIS_CHUNK_COUNT, 'debris', (t) =>
-    new THREE.PlaneGeometry(t.size, t.size * (0.6 + rand(t.layer) * 0.8))
-  );
-  const streakPool = spawnPool(WIND_STREAK_COUNT, 'streak', (t) =>
-    new THREE.PlaneGeometry(t.size, t.size * 4.5 + t.layer * 1.2)
-  );
+  const dustPool = spawnPool(DUST_SPECK_COUNT, 'dust');
+  const mistPool = spawnPool(MIST_WISP_COUNT, 'mist');
+  const debrisPool = spawnPool(DEBRIS_CHUNK_COUNT, 'debris');
+  const streakPool = spawnPool(WIND_STREAK_COUNT, 'streak');
 
   const allParticles = [...dustPool, ...mistPool, ...debrisPool, ...streakPool];
 
@@ -151,7 +184,16 @@ export function createLeoneAbilityVfx(scene) {
   let wallT = 0;
 
   function hideTornado() {
-    for (const p of allParticles) p.mesh.material.opacity = 0;
+    for (const p of allParticles) {
+      p.mesh.visible = false;
+      p.mesh.material.opacity = 0;
+    }
+  }
+
+  function setParticleVisible(mesh, opacity) {
+    const show = opacity > 0.02;
+    mesh.visible = show;
+    mesh.material.opacity = show ? opacity : 0;
   }
 
   function billboard(mesh, camera) {
@@ -202,7 +244,7 @@ export function createLeoneAbilityVfx(scene) {
           : 0.2 + 0.35 * (1 - Math.abs(t - 0.35));
 
     const flicker = 0.75 + 0.25 * Math.sin(spin * 4 + tr.orbitPhase);
-    mesh.material.opacity = baseFade * flicker * env;
+    setParticleVisible(mesh, baseFade * flicker * env);
     mesh.scale.setScalar(kind === 'mist' ? 1 + t * 0.4 : 1);
   }
 
@@ -301,6 +343,7 @@ export function createLeoneAbilityVfx(scene) {
           const preSpin = wallT * 2.5;
           for (const p of allParticles) {
             if (p.kind !== 'debris' && p.kind !== 'dust') {
+              p.mesh.visible = false;
               p.mesh.material.opacity = 0;
               continue;
             }
@@ -309,7 +352,7 @@ export function createLeoneAbilityVfx(scene) {
             const r = R * (0.35 + e * 0.9) * tr.radiusJitter;
             p.mesh.position.set(Math.cos(ang) * r, 0.08 + e * 0.5, Math.sin(ang) * r);
             billboard(p.mesh, camera);
-            p.mesh.material.opacity = 0.22 * e * (p.kind === 'debris' ? 1 : 0.55);
+            setParticleVisible(p.mesh, 0.22 * e * (p.kind === 'debris' ? 1 : 0.55));
           }
         } else {
           wallOrbitAngle += dt * 6.2;

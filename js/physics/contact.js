@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
 import { atkCombatMult, defMult, spinDefMult } from '../game/stats.js';
-import { resolveContactAbilities } from '../game/abilities.js';
+import { resolveContactAbilities, isLibraBusterChannelingBody } from '../game/abilities.js';
 import { clamp01 } from '../utils/math.js';
 
 const _impulse = new CANNON.Vec3();
@@ -63,6 +63,10 @@ export function setupContactHandlers(world, getState) {
     if (!delta) return;
     const top = body ?? (side === 'player' ? state.playerBody : state.aiBody);
     if (delta < 0 && top?.userData?.invulnerable) return;
+    if (delta < 0 && isLibraBusterChannelingBody(state, top)) {
+      delta *= 0.1;
+      if (!delta) return;
+    }
     const key = side === 'player' ? 'playerSpin' : 'aiSpin';
     state[key] = Math.max(0, Math.min(1, state[key] + delta));
   }
@@ -70,6 +74,7 @@ export function setupContactHandlers(world, getState) {
   function applyWallSpinLoss(state, body, impactSpeed) {
     if (!body || body.userData.collisionsDisabled || body.userData.airborne) return;
     if (body.userData.invulnerable) return;
+    if (isLibraBusterChannelingBody(state, body)) return;
     if (impactSpeed < CONFIG.WALL_IMPACT_SOFT) return;
 
     const side = sideOf(body);

@@ -1,15 +1,44 @@
 import { createGame } from './game/engine.js';
 import { createGyroInput } from './input/gyro.js';
-import { applyAISteering } from './input/ai.js';
+import { applyAISteering, tickAIAbilities, resetAIController } from './input/ai.js';
 import { createBeySelection } from './ui/selection.js';
 import { queryGameUi } from './ui/domRefs.js';
+import { createCampaignController } from './game/campaignController.js';
 
 const btnStart = document.getElementById('btn-start');
+const btnRecalibrate = document.getElementById('btn-recalibrate');
 const permissionHint = document.getElementById('permission-hint');
 const selectOverlay = document.getElementById('select-overlay');
+const campaignHud = document.getElementById('campaign-hud');
 const gyro = createGyroInput(document.getElementById('game-canvas'));
 
-const game = createGame({
+let gameRef = null;
+let selection = null;
+
+const campaignCtrl = createCampaignController({
+  campaignHud,
+  gameoverTitle: document.getElementById('gameover-title'),
+  gameoverMsg: document.getElementById('gameover-msg'),
+  btnRestart: document.getElementById('btn-restart'),
+  onOpponentChange(opp) {
+    gameRef.state.aiBey = opp;
+    selection.setRivalPick(opp);
+  },
+});
+
+function openBeySelect() {
+  campaignCtrl.resetCampaign();
+  resetAIController();
+  selection.reset([{ label: 'YOU' }]);
+  selection.setRivalLabel('CPU');
+  gameRef.returnToMenu();
+  selectOverlay.classList.remove('hidden');
+  campaignHud?.classList.add('hidden');
+  btnStart.disabled = true;
+  btnStart.textContent = 'Calibrate & Start';
+}
+
+gameRef = createGame({
   mode: 'mobile',
   canvas: document.getElementById('game-canvas'),
   ui: queryGameUi({
@@ -20,6 +49,7 @@ const game = createGame({
     applySteering(state) {
       gyro.applyGyroSteer(state.playerBody, state.playerSpin);
       applyAISteering(state.aiBody, state.playerBody, state.aiSpin);
+      tickAIAbilities(state, (slot) => gameRef.triggerAbility('ai', slot));
     },
     async onStartClick(startGame) {
       btnStart.disabled = true;
@@ -37,18 +67,40 @@ const game = createGame({
       gyro.startListening();
       await gyro.calibrateOnce();
       startGame();
+      campaignCtrl.updateHud();
+    },
+    onMatchEnd: (result) => campaignCtrl.handleMatchEnd(result),
+    onRestart(resetGame) {
+      if (campaignCtrl.handlesRestart()) {
+        campaignCtrl.handleRestart(resetGame);
+      } else {
+        resetAIController();
+        resetGame();
+      }
+    },
+    onChangeBey: openBeySelect,
+    async onRecalibrate(resetGame) {
+      if (!btnRecalibrate) return;
+      btnRecalibrate.disabled = true;
+      const label = btnRecalibrate.textContent;
+      btnRecalibrate.textContent = 'Calibrating…';
+      await gyro.calibrateOnce();
+      btnRecalibrate.disabled = false;
+      btnRecalibrate.textContent = label;
+      resetAIController();
+      resetGame();
     },
   },
 });
 
-const selection = createBeySelection({
+selection = createBeySelection({
   root: selectOverlay,
   players: [{ label: 'YOU' }],
+  rivalLabel: 'CPU',
   onComplete(picks) {
-    game.state.playerBey = picks[0];
-    // Rival picks a random bey from those still available.
-    const open = selection.remaining();
-    game.state.aiBey = open[Math.floor(Math.random() * open.length)];
+    gameRef.state.playerBey = picks[0];
+    campaignCtrl.startCampaign();
+    resetAIController();
     setTimeout(() => selectOverlay.classList.add('hidden'), 600);
   },
 });

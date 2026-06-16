@@ -3,15 +3,24 @@ import { clamp01 } from '../utils/math.js';
 import { CONFIG } from '../config.js';
 import { LDRAGO_FLIGHT_DURATION, LDRAGO_SPIN_STEAL_DURATION } from '../game/abilities.js';
 
-function makeMat(color, opacity, { additive = false } = {}) {
+function makeMat(color, opacity, { additive = false, doubleSide = false } = {}) {
   return new THREE.MeshBasicMaterial({
     color,
     transparent: true,
     opacity,
     depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    side: THREE.DoubleSide,
+    side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
   });
+}
+
+function createMatCache() {
+  const cache = new Map();
+  return (color, additive = false, doubleSide = false) => {
+    const key = `${color}|${additive ? 1 : 0}|${doubleSide ? 1 : 0}`;
+    if (!cache.has(key)) cache.set(key, makeMat(color, 0, { additive, doubleSide }));
+    return cache.get(key);
+  };
 }
 
 const CRIMSON = 0xef4444;
@@ -21,15 +30,15 @@ const ORANGE = 0xfb923c;
 const PALE = 0xfca5a5;
 const WHITE_HOT = 0xfee2e2;
 
-const DRAIN_COUNT = 55;
-const EMBER_COUNT = 12;
-const STEAL_BEAM_COUNT = 10;
+const DRAIN_COUNT = 28;
+const EMBER_COUNT = 8;
+const STEAL_BEAM_COUNT = 6;
 const DRAGON_WING_COUNT = 6;
-const HELIX_FLAME_COUNT = 52;
-const WINDUP_OUT_DUST = 36;
-const WINDUP_IN_GATHER = 28;
-const ORBIT_EMBER_COUNT = 18;
-const REPULSE_SPARK_COUNT = 40;
+const HELIX_FLAME_COUNT = 28;
+const WINDUP_OUT_DUST = 20;
+const WINDUP_IN_GATHER = 16;
+const ORBIT_EMBER_COUNT = 10;
+const REPULSE_SPARK_COUNT = 20;
 const REPULSE_RING_COUNT = 3;
 const FLIGHT_COLUMN_HEIGHT = 4.2;
 
@@ -47,6 +56,7 @@ function buildTraits(count, kind) {
       speed: 0.6 + rand(s + 1) * 1.3,
       radius: 0.65 + rand(s + 2) * 0.45,
       height: rand(s + 3),
+      sizeTier: Math.floor(rand(s + 4) * 3),
       size: kind === 'drain'
         ? 0.025 + rand(s + 4) * 0.055
         : kind === 'ember'
@@ -57,58 +67,78 @@ function buildTraits(count, kind) {
               ? 0.04 + rand(s + 4) * 0.07
               : 0.03 + rand(s + 4) * 0.05,
       colorPick: Math.floor(rand(s + 5) * 3),
+      // Pre-baked heat band for helix strands — avoids per-frame material.color.setHex.
+      heatBand: Math.floor(rand(s + 11) * 3),
     });
   }
   return traits;
 }
 
+const DRAIN_GEOS = [
+  new THREE.PlaneGeometry(0.03, 0.026),
+  new THREE.PlaneGeometry(0.045, 0.038),
+  new THREE.PlaneGeometry(0.06, 0.05),
+];
+const HELIX_GEOS = [
+  new THREE.PlaneGeometry(0.04, 0.1),
+  new THREE.PlaneGeometry(0.055, 0.13),
+  new THREE.PlaneGeometry(0.07, 0.16),
+];
+const EMBER_GEOS = [
+  new THREE.PlaneGeometry(0.06, 0.06),
+  new THREE.PlaneGeometry(0.08, 0.08),
+  new THREE.PlaneGeometry(0.1, 0.1),
+];
+const HELIX_HEAT_COLORS = [WHITE_HOT, ORANGE, CRIMSON];
+
 /** L-Drago Spin Steal + Supreme Flight scene VFX. */
 export function createLdragoAbilityVfx(scene) {
   const root = new THREE.Group();
   scene.add(root);
+  const getMat = createMatCache();
 
   const stealGroup = new THREE.Group();
   const flightGroup = new THREE.Group();
   root.add(stealGroup);
   root.add(flightGroup);
 
-  function spawnPool(parent, count, kind, geoFn, additive) {
+  function setVisible(mesh, opacity) {
+    const show = opacity > 0.02;
+    mesh.visible = show;
+    mesh.material.opacity = show ? opacity : 0;
+  }
+
+  function spawnPool(parent, count, kind, geos, additive) {
     const traits = buildTraits(count, kind);
     const pool = [];
     const colors = [CRIMSON, RED_DEEP, RED_DARK];
     for (let i = 0; i < count; i++) {
-      const mat = makeMat(
-        kind === 'ember' || kind === 'flame' ? ORANGE : colors[traits[i].colorPick % 3],
-        0,
-        { additive: additive || kind === 'ember' }
-      );
-      const mesh = new THREE.Mesh(geoFn(traits[i]), mat);
+      const tr = traits[i];
+      const color = kind === 'ember'
+        ? ORANGE
+        : kind === 'helix'
+          ? HELIX_HEAT_COLORS[tr.heatBand]
+          : colors[tr.colorPick % 3];
+      const mat = getMat(color, additive || kind === 'ember' || kind === 'helix');
+      const geo = geos ? geos[tr.sizeTier] : new THREE.PlaneGeometry(tr.size, tr.size * 0.85);
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.renderOrder = kind === 'drain' ? 4 : 5;
+      mesh.visible = false;
       parent.add(mesh);
-      pool.push({ mesh, traits: traits[i], kind });
+      pool.push({ mesh, traits: tr, kind });
     }
     return pool;
   }
 
-  const drainPool = spawnPool(
-    stealGroup,
-    DRAIN_COUNT,
-    'drain',
-    (t) => new THREE.PlaneGeometry(t.size, t.size * 0.85),
-    false
-  );
-  const emberPool = spawnPool(
-    stealGroup,
-    EMBER_COUNT,
-    'ember',
-    (t) => new THREE.PlaneGeometry(t.size, t.size),
-    true
-  );
+  const drainPool = spawnPool(stealGroup, DRAIN_COUNT, 'drain', DRAIN_GEOS, false);
+  const emberPool = spawnPool(stealGroup, EMBER_COUNT, 'ember', EMBER_GEOS, true);
+  const helixPool = spawnPool(flightGroup, HELIX_FLAME_COUNT, 'helix', HELIX_GEOS, true);
   const stealBeams = [];
+  const beamMat = getMat(PALE, true);
   for (let i = 0; i < STEAL_BEAM_COUNT; i++) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.05, 0.05),
-      makeMat(PALE, 0, { additive: true })
+      beamMat
     );
     mesh.renderOrder = 6;
     stealGroup.add(mesh);
@@ -117,7 +147,7 @@ export function createLdragoAbilityVfx(scene) {
 
   const stealCore = new THREE.Mesh(
     new THREE.PlaneGeometry(1.1, 1.1),
-    makeMat(WHITE_HOT, 0, { additive: true })
+    getMat(WHITE_HOT, true)
   );
   stealCore.renderOrder = 7;
   stealGroup.add(stealCore);
@@ -128,7 +158,7 @@ export function createLdragoAbilityVfx(scene) {
     const tier = i % 3;
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.42 + tier * 0.16, 1.55 + tier * 0.42),
-      makeMat(tier === 0 ? ORANGE : tier === 1 ? CRIMSON : RED_DEEP, 0, { additive: true })
+      getMat(tier === 0 ? ORANGE : tier === 1 ? CRIMSON : RED_DEEP, true)
     );
     mesh.renderOrder = 6;
     flightGroup.add(mesh);
@@ -140,19 +170,11 @@ export function createLdragoAbilityVfx(scene) {
     });
   }
 
-  const helixPool = spawnPool(
-    flightGroup,
-    HELIX_FLAME_COUNT,
-    'helix',
-    (t) => new THREE.PlaneGeometry(t.size, t.size * 2.4),
-    true
-  );
-
   const orbitEmbers = [];
   for (let i = 0; i < ORBIT_EMBER_COUNT; i++) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.07, 0.07),
-      makeMat(i % 2 === 0 ? PALE : ORANGE, 0, { additive: true })
+      getMat(i % 2 === 0 ? PALE : ORANGE, true)
     );
     mesh.renderOrder = 7;
     flightGroup.add(mesh);
@@ -163,7 +185,7 @@ export function createLdragoAbilityVfx(scene) {
   for (let i = 0; i < WINDUP_OUT_DUST; i++) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.05 + (i % 4) * 0.015, 0.05 + (i % 3) * 0.012),
-      makeMat(i % 3 === 0 ? RED_DARK : RED_DEEP, 0)
+      getMat(i % 3 === 0 ? RED_DARK : RED_DEEP)
     );
     mesh.renderOrder = 3;
     flightGroup.add(mesh);
@@ -174,7 +196,7 @@ export function createLdragoAbilityVfx(scene) {
   for (let i = 0; i < WINDUP_IN_GATHER; i++) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.04, 0.04),
-      makeMat(i % 2 === 0 ? CRIMSON : ORANGE, 0, { additive: true })
+      getMat(i % 2 === 0 ? CRIMSON : ORANGE, true)
     );
     mesh.renderOrder = 4;
     flightGroup.add(mesh);
@@ -182,37 +204,37 @@ export function createLdragoAbilityVfx(scene) {
   }
 
   const windupCrater = new THREE.Mesh(
-    new THREE.RingGeometry(0.35, 1.15, 48),
-    makeMat(CRIMSON, 0, { additive: true })
+    new THREE.RingGeometry(0.35, 1.15, 24),
+    getMat(CRIMSON, true)
   );
   windupCrater.rotation.x = -Math.PI / 2;
   windupCrater.renderOrder = 2;
   flightGroup.add(windupCrater);
 
   const windupPillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.55, 1, 16, 1, true),
-    makeMat(ORANGE, 0, { additive: true })
+    new THREE.CylinderGeometry(0.22, 0.55, 1, 12, 1, true),
+    getMat(ORANGE, true)
   );
   windupPillar.renderOrder = 3;
   flightGroup.add(windupPillar);
 
   const pillarOuter = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.55, 0.85, 1, 20, 1, true),
-    makeMat(RED_DARK, 0, { additive: true })
+    new THREE.CylinderGeometry(0.55, 0.85, 1, 14, 1, true),
+    getMat(RED_DARK, true)
   );
   pillarOuter.renderOrder = 1;
   flightGroup.add(pillarOuter);
 
   const pillarInner = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.42, 1, 16, 1, true),
-    makeMat(WHITE_HOT, 0, { additive: true })
+    new THREE.CylinderGeometry(0.28, 0.42, 1, 12, 1, true),
+    getMat(WHITE_HOT, true)
   );
   pillarInner.renderOrder = 2;
   flightGroup.add(pillarInner);
 
   const hoverAura = new THREE.Mesh(
-    new THREE.RingGeometry(0.75, 1.35, 48),
-    makeMat(CRIMSON, 0, { additive: true })
+    new THREE.RingGeometry(0.75, 1.35, 24),
+    getMat(CRIMSON, true)
   );
   hoverAura.rotation.x = -Math.PI / 2;
   hoverAura.renderOrder = 5;
@@ -220,7 +242,7 @@ export function createLdragoAbilityVfx(scene) {
 
   const dragonBackdrop = new THREE.Mesh(
     new THREE.PlaneGeometry(2.8, 2.2),
-    makeMat(RED_DEEP, 0, { additive: true })
+    getMat(RED_DEEP, true)
   );
   dragonBackdrop.renderOrder = 4;
   flightGroup.add(dragonBackdrop);
@@ -228,8 +250,8 @@ export function createLdragoAbilityVfx(scene) {
   const repulseRings = [];
   for (let i = 0; i < REPULSE_RING_COUNT; i++) {
     const mesh = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.72, 40),
-      makeMat(i === 0 ? WHITE_HOT : PALE, 0, { additive: true })
+      new THREE.RingGeometry(0.5, 0.72, 24),
+      getMat(i === 0 ? WHITE_HOT : PALE, true)
     );
     mesh.rotation.x = -Math.PI / 2;
     mesh.renderOrder = 9;
@@ -241,7 +263,7 @@ export function createLdragoAbilityVfx(scene) {
   for (let i = 0; i < REPULSE_SPARK_COUNT; i++) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.06 + (i % 3) * 0.025, 0.06 + (i % 2) * 0.02),
-      makeMat(i % 4 === 0 ? WHITE_HOT : PALE, 0, { additive: true })
+      getMat(i % 4 === 0 ? WHITE_HOT : PALE, true)
     );
     mesh.renderOrder = 8;
     flightGroup.add(mesh);
@@ -253,26 +275,33 @@ export function createLdragoAbilityVfx(scene) {
   let flightT = 0;
 
   function hideSteal() {
-    for (const p of drainPool) p.mesh.material.opacity = 0;
-    for (const p of emberPool) p.mesh.material.opacity = 0;
-    for (const b of stealBeams) b.mesh.material.opacity = 0;
+    for (const p of drainPool) { p.mesh.visible = false; p.mesh.material.opacity = 0; }
+    for (const p of emberPool) { p.mesh.visible = false; p.mesh.material.opacity = 0; }
+    for (const b of stealBeams) { b.mesh.visible = false; b.mesh.material.opacity = 0; }
+    stealCore.visible = false;
     stealCore.material.opacity = 0;
   }
 
   function hideFlight() {
-    for (const w of dragonWings) w.mesh.material.opacity = 0;
-    for (const p of helixPool) p.mesh.material.opacity = 0;
-    for (const e of orbitEmbers) e.mesh.material.opacity = 0;
-    for (const d of windupOutDust) d.mesh.material.opacity = 0;
-    for (const g of windupGather) g.mesh.material.opacity = 0;
+    for (const w of dragonWings) { w.mesh.visible = false; w.mesh.material.opacity = 0; }
+    for (const p of helixPool) { p.mesh.visible = false; p.mesh.material.opacity = 0; }
+    for (const e of orbitEmbers) { e.mesh.visible = false; e.mesh.material.opacity = 0; }
+    for (const d of windupOutDust) { d.mesh.visible = false; d.mesh.material.opacity = 0; }
+    for (const g of windupGather) { g.mesh.visible = false; g.mesh.material.opacity = 0; }
+    windupCrater.visible = false;
+    windupPillar.visible = false;
+    pillarOuter.visible = false;
+    pillarInner.visible = false;
+    hoverAura.visible = false;
+    dragonBackdrop.visible = false;
     windupCrater.material.opacity = 0;
     windupPillar.material.opacity = 0;
     pillarOuter.material.opacity = 0;
     pillarInner.material.opacity = 0;
     hoverAura.material.opacity = 0;
     dragonBackdrop.material.opacity = 0;
-    for (const r of repulseRings) r.mesh.material.opacity = 0;
-    for (const s of repulseSparks) s.mesh.material.opacity = 0;
+    for (const r of repulseRings) { r.mesh.visible = false; r.mesh.material.opacity = 0; }
+    for (const s of repulseSparks) { s.mesh.visible = false; s.mesh.material.opacity = 0; }
   }
 
   function billboard(mesh, camera) {
@@ -338,7 +367,7 @@ export function createLdragoAbilityVfx(scene) {
             bz + Math.sin(tr.phase) * orbitR
           );
           billboard(p.mesh, camera);
-          p.mesh.material.opacity = (0.28 + 0.2 * Math.sin(tr.phase * 3)) * life;
+          setVisible(p.mesh, (0.28 + 0.2 * Math.sin(tr.phase * 3)) * life);
         }
 
         // Counter-rotating embers.
@@ -352,7 +381,7 @@ export function createLdragoAbilityVfx(scene) {
             bz + Math.sin(tr.phase) * orbitR
           );
           billboard(p.mesh, camera);
-          p.mesh.material.opacity = (0.35 + 0.15 * Math.sin(tr.phase)) * life;
+          setVisible(p.mesh, (0.35 + 0.15 * Math.sin(tr.phase)) * life);
         }
 
         // Steal burst beams from opponent toward L-Drago.
@@ -367,16 +396,17 @@ export function createLdragoAbilityVfx(scene) {
               fromZ + (bz - fromZ) * ease
             );
             billboard(beam.mesh, camera);
-            beam.mesh.material.opacity = burst * (1 - t) * 0.7 * life;
+            setVisible(beam.mesh, burst * (1 - t) * 0.7 * life);
           }
         } else {
-          for (const b of stealBeams) b.mesh.material.opacity = 0;
+          for (const b of stealBeams) { b.mesh.visible = false; b.mesh.material.opacity = 0; }
         }
 
         stealCore.position.set(bx, yBase, bz);
         billboard(stealCore, camera);
         stealCore.scale.setScalar(topGroup.scale.x * (0.4 + 0.15 * Math.sin(stealSpin * 3)));
-        stealCore.material.opacity = (0.15 + burst * 0.35) * life;
+        stealCore.visible = true;
+        setVisible(stealCore, (0.15 + burst * 0.35) * life);
       }
 
       if (flightWindup || inFlight) {
@@ -511,8 +541,7 @@ export function createLdragoAbilityVfx(scene) {
             const angle = tr.phase * 2.4 + flightSpin * 1.8 + t * Math.PI * 4;
             p.mesh.position.set(Math.cos(angle) * r, h, Math.sin(angle) * r);
             p.mesh.rotation.set(Math.sin(angle) * 0.35, angle, 0.12);
-            p.mesh.material.color.setHex(t < 0.35 ? WHITE_HOT : t < 0.7 ? ORANGE : CRIMSON);
-            p.mesh.material.opacity = (0.32 + 0.28 * (1 - Math.abs(t - 0.45))) * env;
+            setVisible(p.mesh, (0.32 + 0.28 * (1 - Math.abs(t - 0.45))) * env);
           }
 
           // Orbiting embers at hover height.

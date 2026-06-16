@@ -13,7 +13,7 @@
 
   <div id="hud">
     <div class="hud-panel">
-      <img class="hud-avatar" id="player-avatar" src="MeteoLdragoLogo.png" alt="" />
+      <img class="hud-avatar" id="player-avatar" src="updatedLdragoLogo.png" alt="" />
       <div class="hud-info">
         <div class="hud-label">You — Spin</div>
         <div class="hud-value" id="player-spin">100%</div>
@@ -30,6 +30,8 @@
     </div>
   </div>
 
+  <div id="campaign-hud" class="campaign-hud hidden" aria-live="polite"></div>
+
   <div id="tilt-hint">Tilt phone to steer · Tap a move button to unleash a gimmick</div>
 
   <div id="player-abilities" class="ability-bar ability-bar-right"></div>
@@ -41,7 +43,7 @@
   <div id="start-overlay">
     <div class="logo-ring"></div>
     <h1>Spin Sumo</h1>
-    <p>Tilt your phone to steer your bey into the rival. Knock them out through a stadium pocket to win!</p>
+    <p>CPU campaign — best of 3 against each rival. Win the series to face the next, tougher bey!</p>
     <button id="btn-start">Calibrate &amp; Start</button>
     <p id="permission-hint">Requires motion sensor access on iOS. Hold phone flat when starting.</p>
   </div>
@@ -49,7 +51,11 @@
   <div id="gameover-overlay">
     <h2 id="gameover-title">KNOCKOUT!</h2>
     <p id="gameover-msg">You win!</p>
-    <button id="btn-restart">Play Again</button>
+    <div class="gameover-actions">
+      <button id="btn-restart" type="button">Play Again</button>
+      <button id="btn-change-bey" type="button" class="gameover-btn-secondary">Change Bey</button>
+      <button id="btn-recalibrate" type="button" class="gameover-btn-secondary">Recalibrate</button>
+    </div>
   </div>
 
   <script type="importmap">

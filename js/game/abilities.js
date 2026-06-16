@@ -10,6 +10,9 @@
  *   special — active, cinematic (windup plays a logo flash before the effect)
  *   passive — always-on, reacts to collisions via resolveContactAbilities
  *
+ * charge  — seconds to fill before the move is available at match start (and
+ *           after each use, cooldown applies). Stronger moves use longer charges.
+ *
  * Spin is the 0..1 model stored in game state (playerSpin / aiSpin); all spin
  * changes go through addSpin (clamped). Per-body runtime flags are stamped onto
  * body.userData (steerMult, controlLocked, airborne, boosting, slamming, guarding)
@@ -75,6 +78,26 @@ const LEONE_WALL_SELF_SPIN = 0.012; // passive drain per second during the wall
 const LEONE_WALL_PULSE = 0.12;
 const LEONE_WALL_REACH_MULT = 4.35; // reach = (rSelf + rOpp) * this — full tornado radius
 export const LEONE_WALL_DURATION = 5.55;  // active tornado time (3× original 1.85s)
+
+// Flame Libra — Sonic Shield + Sonic Buster (stamina / control tuned).
+const LIBRA_SHIELD_REPULSE = 3.6;
+const LIBRA_SHIELD_REPULSE_SPIN = 0.0055;
+const LIBRA_SHIELD_SELF_SPIN = 0.009;
+const LIBRA_SHIELD_PULSE = 0.13;
+const LIBRA_SHIELD_REACH_MULT = 2.75;
+export const LIBRA_SHIELD_DURATION = 3.4;
+
+export const LIBRA_BUSTER_RADIUS_MULT = 10.4;
+export const LIBRA_BUSTER_DURATION = 4.8;
+const LIBRA_BUSTER_SLOW_STEER = 0.36;
+const LIBRA_BUSTER_DRAG = 3.1;
+const LIBRA_BUSTER_SLOW_RATE = 2;
+const LIBRA_BUSTER_VIBRATE_HZ = 58;
+const LIBRA_BUSTER_VIBRATE_LIFT = 0.34;
+const LIBRA_BUSTER_VISUAL_SPIN = 4.5;
+const LIBRA_BUSTER_QUICKSAND_PULL = 3.4;
+const LIBRA_BUSTER_QUICKSAND_SINK = 14;
+const LIBRA_BUSTER_DAMAGE_TAKEN = 0.1;
 
 function groundY(body) {
   const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
@@ -315,6 +338,66 @@ function clearStarBlastMotion(body) {
   delete body.userData.starKnockbackVZ;
 }
 
+function clearSonicSlow(body) {
+  if (!body) return;
+  if (body.userData._sonicSlowBaseSteer != null) {
+    body.userData.steerMult = body.userData._sonicSlowBaseSteer;
+    delete body.userData._sonicSlowBaseSteer;
+  }
+  delete body.userData.sonicSlow;
+}
+
+function clearLibraSandBoost(body) {
+  if (!body) return;
+  if (body.userData._sonicSandBaseSteer != null) {
+    body.userData.steerMult = body.userData._sonicSandBaseSteer;
+    delete body.userData._sonicSandBaseSteer;
+  }
+  delete body.userData.sonicSandBoost;
+}
+
+function clearLibraBusterVibrate(body) {
+  if (!body) return;
+  delete body.userData.sonicBusterVibrateT;
+  delete body.userData.sonicBusterVisualSpinMult;
+  delete body.userData.sonicBusterFromX;
+  delete body.userData.sonicBusterFromZ;
+}
+
+function isLibraBusterChannelingBody(state, body) {
+  if (!body) return false;
+  if (body.userData.sonicBuster || body.userData.sonicBusterWindup) return true;
+  for (const side of ['player', 'ai']) {
+    if ((side === 'player' ? state.playerBody : state.aiBody) !== body) continue;
+    const slot = state.abilities?.[side]?.special;
+    if (slot?.ability?.id !== 'libra_sonic_buster') return false;
+    return slot.windupRemaining > 0 || slot.active;
+  }
+  return false;
+}
+
+/** Pins Libra at stadium center while Sonic Buster windup/active (physics rate). */
+function stepLibraBusterChannel(state, dt) {
+  for (const side of ['player', 'ai']) {
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    if (!isLibraBusterChannelingBody(state, body)) continue;
+
+    const slot = state.abilities[side].special;
+    const windup = slot.ability.windup || 0.45;
+    let t = 1;
+    if (slot.windupRemaining > 0) {
+      t = easeOutCubic(1 - slot.windupRemaining / windup);
+    }
+    const fx = body.userData.sonicBusterFromX ?? body.position.x;
+    const fz = body.userData.sonicBusterFromZ ?? body.position.z;
+    body.position.x = fx + (0 - fx) * t;
+    body.position.z = fz + (0 - fz) * t;
+    body.velocity.set(0, 0, 0);
+    body.userData.sonicBusterX = 0;
+    body.userData.sonicBusterZ = 0;
+  }
+}
+
 // ---- registry ---------------------------------------------------------------
 export const ABILITY_REGISTRY = {
   pegasus_speed_boost: {
@@ -323,6 +406,7 @@ export const ABILITY_REGISTRY = {
     slot: 'power',
     icon: '»',
     desc: 'Temporary burst of speed and grip.',
+    charge: 5,
     cooldown: 8,
     duration: 3,
     windup: 0,
@@ -350,6 +434,7 @@ export const ABILITY_REGISTRY = {
     slot: 'special',
     icon: '\u2605',
     desc: 'Slams the wall, dives on the foe for heavy spin damage; whiffs cost ~5% spin.',
+    charge: 11,
     cooldown: 12,
     duration: 6,
     windup: 0.5,
@@ -377,6 +462,7 @@ export const ABILITY_REGISTRY = {
     slot: 'special',
     icon: '\u2726',
     desc: 'Rises off the stadium; immune to spin damage; attackers are violently repelled.',
+    charge: 10.5,
     cooldown: 14,
     duration: 1.4,
     windup: 0.5,
@@ -427,6 +513,7 @@ export const ABILITY_REGISTRY = {
     slot: 'power',
     icon: '\u21BB',
     desc: 'While active, steal opponent spin, take no spin loss, and cut collision knockback by 60%.',
+    charge: 7.5,
     cooldown: 10,
     duration: 4,
     windup: 0,
@@ -452,6 +539,7 @@ export const ABILITY_REGISTRY = {
     slot: 'power',
     icon: '\u25C9',
     desc: 'WB tip digs in — planted grip; immune to knockback, but deals modest knockback.',
+    charge: 6,
     cooldown: 9,
     duration: 2.6,
     windup: 0,
@@ -487,6 +575,7 @@ export const ABILITY_REGISTRY = {
     slot: 'special',
     icon: '\u25CE',
     desc: 'Spins up a green tornado wall — repels rivals and shrugs off spin loss; costs a little stamina.',
+    charge: 9,
     cooldown: 12,
     duration: LEONE_WALL_DURATION,
     windup: 0.45,
@@ -548,13 +637,168 @@ export const ABILITY_REGISTRY = {
       if (b.userData.prevDamping != null) b.linearDamping = b.userData.prevDamping;
     },
   },
+
+  libra_sonic_shield: {
+    id: 'libra_sonic_shield',
+    name: 'Sonic Shield',
+    slot: 'power',
+    icon: '\u25CE',
+    desc: 'Green aura deflects rivals and their attacks away from Libra.',
+    charge: 6.5,
+    cooldown: 9,
+    duration: LIBRA_SHIELD_DURATION,
+    windup: 0,
+    glow: '#4ade80',
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.guarding = true;
+      b.userData.sonicShield = true;
+      b.userData.sonicShieldPulse = 0;
+      b.userData.sonicShieldT = 0;
+      b.userData.sonicShieldReach =
+        (b.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS) * LIBRA_SHIELD_REACH_MULT;
+    },
+    onStep(ctx) {
+      const b = ctx.body;
+      const opp = ctx.opponentBody;
+      b.userData.sonicShieldPulse = (b.userData.sonicShieldPulse ?? 0) + ctx.dt;
+      ctx.addSpin(-LIBRA_SHIELD_SELF_SPIN * ctx.dt, ctx.side);
+
+      if (!opp || b.userData.sonicShieldPulse < LIBRA_SHIELD_PULSE) return;
+      b.userData.sonicShieldPulse = 0;
+
+      const rA = b.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+      const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+      const dx = opp.position.x - b.position.x;
+      const dz = opp.position.z - b.position.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      const reach = (rA + rB) * LIBRA_SHIELD_REACH_MULT;
+      b.userData.sonicShieldReach = reach;
+      if (dist >= reach) return;
+
+      const falloff = 1 - dist / reach;
+      const push = LIBRA_SHIELD_REPULSE * falloff;
+      opp.velocity.x += (dx / dist) * push;
+      opp.velocity.z += (dz / dist) * push;
+      if (falloff > 0.22) {
+        ctx.addSpin(-LIBRA_SHIELD_REPULSE_SPIN * falloff, ctx.oppSide);
+        b.userData.sonicShieldBurstT = falloff;
+      }
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      b.userData.guarding = false;
+      b.userData.sonicShield = false;
+      delete b.userData.sonicShieldPulse;
+      delete b.userData.sonicShieldT;
+      delete b.userData.sonicShieldBurstT;
+      delete b.userData.sonicShieldReach;
+      b.userData.flightSquash = 1;
+      b.userData.flightTilt = 0;
+      b.userData.flightRoll = 0;
+    },
+  },
+
+  libra_sonic_buster: {
+    id: 'libra_sonic_buster',
+    name: 'Sonic Buster',
+    slot: 'special',
+    icon: '\u25C9',
+    desc: 'Rushes to center, bounces at sonic speed, and opens quicksand that sucks rivals inward.',
+    charge: 12.5,
+    cooldown: 13,
+    duration: LIBRA_BUSTER_DURATION,
+    windup: 0.45,
+    glow: '#a3e635',
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.sonicBuster = true;
+      b.userData.sonicBusterWindup = false;
+      b.userData.controlLocked = true;
+      b.userData.sonicBusterT = 0;
+      b.userData.sonicBusterX = 0;
+      b.userData.sonicBusterZ = 0;
+      b.position.x = 0;
+      b.position.z = 0;
+      b.velocity.set(0, 0, 0);
+      const R = b.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+      b.userData.sonicBusterReach = R * LIBRA_BUSTER_RADIUS_MULT;
+    },
+    onStep(ctx) {
+      const b = ctx.body;
+      clearSonicSlow(b);
+      b.userData.sonicBusterT = (b.userData.sonicBusterT ?? 0) + ctx.dt;
+      b.position.x = 0;
+      b.position.z = 0;
+      b.velocity.set(0, 0, 0);
+      const pitX = 0;
+      const pitZ = 0;
+      const reach = b.userData.sonicBusterReach ?? CONFIG.DEFAULT_OUTER_RADIUS * LIBRA_BUSTER_RADIUS_MULT;
+
+      for (const victim of [ctx.state.playerBody, ctx.state.aiBody]) {
+        if (!victim || victim === b) continue;
+        const dx = victim.position.x - pitX;
+        const dz = victim.position.z - pitZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= reach) {
+          clearSonicSlow(victim);
+          continue;
+        }
+
+        const falloff = 1 - dist / reach;
+        if (victim.userData._sonicSlowBaseSteer == null) {
+          victim.userData._sonicSlowBaseSteer = victim.userData.steerMult ?? 1;
+        }
+        victim.userData.sonicSlow = falloff;
+        const slowAmt = (1 - LIBRA_BUSTER_SLOW_STEER) * falloff * LIBRA_BUSTER_SLOW_RATE;
+        const slowFactor = Math.max(0.06, 1 - slowAmt);
+        victim.userData.steerMult = victim.userData._sonicSlowBaseSteer * slowFactor;
+        const drag = 1 - Math.min(
+          0.9,
+          LIBRA_BUSTER_DRAG * LIBRA_BUSTER_SLOW_RATE * falloff * ctx.dt
+        );
+        victim.velocity.x *= drag;
+        victim.velocity.z *= drag;
+
+        const sink = LIBRA_BUSTER_QUICKSAND_SINK * falloff * ctx.dt;
+        victim.velocity.x -= (dx / dist) * sink;
+        victim.velocity.z -= (dz / dist) * sink;
+      }
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      b.userData.sonicBuster = false;
+      b.userData.sonicBusterWindup = false;
+      b.userData.controlLocked = false;
+      delete b.userData.sonicBusterT;
+      delete b.userData.sonicBusterX;
+      delete b.userData.sonicBusterZ;
+      delete b.userData.sonicBusterReach;
+      b.userData.flightSquash = 1;
+      b.userData.flightTilt = 0;
+      b.userData.flightRoll = 0;
+      b.userData.flightLift = 0;
+      clearLibraSandBoost(b);
+      clearLibraBusterVibrate(b);
+      clearSonicSlow(ctx.state.playerBody);
+      clearSonicSlow(ctx.state.aiBody);
+    },
+  },
 };
 
 // ---- runtime ----------------------------------------------------------------
 function makeSlot(id) {
   const ability = id ? ABILITY_REGISTRY[id] || null : null;
   if (!ability) return null;
-  return { ability, cooldownRemaining: 0, windupRemaining: 0, active: false, activeRemaining: 0 };
+  const initialCharge = ability.charge ?? ability.cooldown ?? 0;
+  return {
+    ability,
+    cooldownRemaining: initialCharge,
+    cooldownTotal: initialCharge,
+    windupRemaining: 0,
+    active: false,
+    activeRemaining: 0,
+  };
 }
 
 export function createAbilityRuntime(bey) {
@@ -620,6 +864,7 @@ export function triggerAbility(state, side, slotName) {
 
   const ability = slot.ability;
   slot.cooldownRemaining = ability.cooldown || 0;
+  slot.cooldownTotal = ability.cooldown || 0;
   if ((ability.windup || 0) > 0) {
     slot.windupRemaining = ability.windup;
     if (ability.id === 'pegasus_star_blast') {
@@ -643,6 +888,19 @@ export function triggerAbility(state, side, slotName) {
         body.userData.lionWallWindup = true;
       }
     }
+    if (ability.id === 'libra_sonic_buster') {
+      const body = side === 'player' ? state.playerBody : state.aiBody;
+      if (body) {
+        body.userData.controlLocked = true;
+        body.userData.sonicBusterWindup = true;
+        body.userData.sonicBusterFromX = body.position.x;
+        body.userData.sonicBusterFromZ = body.position.z;
+        body.userData.sonicBusterX = 0;
+        body.userData.sonicBusterZ = 0;
+        body.userData.sonicBusterVibrateT = 0;
+        body.velocity.set(0, 0, 0);
+      }
+    }
   } else {
     activateSlot(state, side, slot);
   }
@@ -652,6 +910,7 @@ export function triggerAbility(state, side, slotName) {
 /** Per physics step: drive active abilities that move the body (airborne homing). */
 export function stepAbilities(state, dt) {
   if (!state.abilities) return;
+  stepLibraBusterChannel(state, dt);
   for (const side of ['player', 'ai']) {
     const runtime = state.abilities[side];
     if (!runtime) continue;
@@ -982,6 +1241,54 @@ export function tickLeoneAbilityVisuals(state, dt) {
   }
 }
 
+// ---- Libra cinematic visual driver (render rate) ----------------------------
+
+/**
+ * Per-frame body animation for Flame Libra's Sonic Shield and Sonic Buster.
+ */
+export function tickLibraAbilityVisuals(state, dt) {
+  if (!state.abilities) return;
+  stepLibraBusterChannel(state, dt);
+  for (const side of ['player', 'ai']) {
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    if (!body) continue;
+    const runtime = state.abilities[side];
+    if (!runtime) continue;
+
+    const pwSlot = runtime.power;
+    if (pwSlot?.active && pwSlot.ability.id === 'libra_sonic_shield') {
+      const t = body.userData.sonicShieldT ?? 0;
+      body.userData.sonicShieldT = t + dt;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 5.2);
+      body.userData.flightSquash = 1 - 0.06 * pulse;
+      body.userData.flightRoll = Math.sin(t * 3.4) * 0.04;
+      body.userData.flightTilt = 0.03 * pulse;
+      if (body.userData.sonicShieldBurstT != null) {
+        body.userData.sonicShieldBurstT -= dt * 7;
+        if (body.userData.sonicShieldBurstT <= 0) delete body.userData.sonicShieldBurstT;
+      }
+      continue;
+    }
+
+    const spSlot = runtime.special;
+    if (!spSlot || spSlot.ability.id !== 'libra_sonic_buster') continue;
+
+    const inWindup = spSlot.windupRemaining > 0 || body.userData.sonicBusterWindup;
+    const inActive = spSlot.active;
+    if (!inWindup && !inActive) continue;
+
+    const vt = (body.userData.sonicBusterVibrateT ?? 0) + dt;
+    body.userData.sonicBusterVibrateT = vt;
+    const w = LIBRA_BUSTER_VIBRATE_HZ * Math.PI * 2;
+    const bob = Math.sin(vt * w);
+    body.userData.sonicBusterVisualSpinMult = LIBRA_BUSTER_VISUAL_SPIN;
+    body.userData.flightLift = bob * LIBRA_BUSTER_VIBRATE_LIFT;
+    body.userData.flightSquash = 1 - bob * 0.1;
+    body.userData.flightTilt = 0;
+    body.userData.flightRoll = 0;
+  }
+}
+
 // ---- L-Drago cinematic visual driver (render rate) --------------------------
 
 /**
@@ -1217,6 +1524,9 @@ function applyGuard(impact, guardBody, guardTag, attackerTag) {
   if (guardBody.userData.invulnerable) {
     guardBody.userData.flightRepulseT = 1;
   }
+  if (guardBody.userData.sonicShield) {
+    guardBody.userData.sonicShieldBurstT = 1;
+  }
 }
 
 function applyStarBlastSlam(impact, slamBody, slamTag, victimTag) {
@@ -1299,6 +1609,17 @@ function applyLeoneAnchor(impact, body, selfTag, oppTag) {
   impact['impulse' + oppTag] *= LEONE_ANCHOR_KB_OUT;
 }
 
+/** Sonic Buster — Libra takes only 10% of bey-vs-bey knockback and spin loss. */
+function applyLibraBusterMitigation(state, impact) {
+  for (const tag of ['A', 'B']) {
+    const body = impact['body' + tag];
+    if (!isLibraBusterChannelingBody(state, body)) continue;
+    impact['impulse' + tag] *= LIBRA_BUSTER_DAMAGE_TAKEN;
+    const delta = impact['spinDelta' + tag];
+    if (delta < 0) impact['spinDelta' + tag] = delta * LIBRA_BUSTER_DAMAGE_TAKEN;
+  }
+}
+
 /**
  * Mutates a base impact object in place to apply ability effects.
  * impact = { bodyA, bodyB, sideA, sideB, closingSpeed,
@@ -1317,7 +1638,10 @@ export function resolveContactAbilities(state, impact) {
   // Run last so slams/guards can't re-apply knockback to an anchored Leone.
   applyLeoneAnchor(impact, impact.bodyA, 'A', 'B');
   applyLeoneAnchor(impact, impact.bodyB, 'B', 'A');
+  applyLibraBusterMitigation(state, impact);
 }
+
+export { isLibraBusterChannelingBody };
 
 /** Clears all per-body ability flags (used on spawn / round reset). */
 export function clearAbilityFlags(body) {
@@ -1330,6 +1654,9 @@ export function clearAbilityFlags(body) {
   body.userData.guarding = false;
   body.userData.anchoring = false;
   body.userData.lionWall = false;
+  body.userData.sonicShield = false;
+  body.userData.sonicBuster = false;
+  body.userData.sonicSandBoost = false;
   body.userData.spinStealing = false;
   body.userData.invulnerable = false;
   body.userData.flightLift = 0;
@@ -1348,6 +1675,15 @@ export function clearAbilityFlags(body) {
   delete body.userData.lionWallT;
   delete body.userData.lionWallBurstT;
   delete body.userData.lionWallReach;
+  delete body.userData.sonicShieldPulse;
+  delete body.userData.sonicShieldT;
+  delete body.userData.sonicShieldBurstT;
+  delete body.userData.sonicShieldReach;
+  delete body.userData.sonicBusterT;
+  delete body.userData.sonicBusterX;
+  delete body.userData.sonicBusterZ;
+  delete body.userData.sonicBusterReach;
+  delete body.userData._sonicSandBaseSteer;
   delete body.userData.boostT;
   delete body.userData.spinStealT;
   delete body.userData.spinStealBurstT;
@@ -1357,6 +1693,10 @@ export function clearAbilityFlags(body) {
   delete body.userData.flightRepulseT;
   body.userData.lionWallWindup = false;
   body.userData.ldragoFlightWindup = false;
+  body.userData.sonicBusterWindup = false;
+  clearSonicSlow(body);
+  clearLibraSandBoost(body);
+  clearLibraBusterVibrate(body);
   if (body.type === CANNON.Body.KINEMATIC) {
     restoreDynamicBody(body);
   }

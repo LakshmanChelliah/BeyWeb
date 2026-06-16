@@ -71,7 +71,7 @@ export function formatEndGame(result, mode) {
     };
   }
 
-  if (mode === 'mobile') {
+  if (mode === 'mobile' || mode === 'pc-cpu') {
     const playerWon = winner === 1;
     if (outcome === 'KO') {
       return {

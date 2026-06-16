@@ -63,7 +63,10 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
           for (const mat of mats) {
             if (!mat) continue;
             if (child.geometry?.attributes?.color) mat.vertexColors = true;
-            if (/leone/i.test(url)) {
+            if (/libra/i.test(url)) {
+              mat.metalness = 0.12;
+              mat.roughness = 0.65;
+            } else if (/leone/i.test(url)) {
               mat.metalness = 0.15;
               mat.roughness = 0.48;
             }
@@ -77,8 +80,8 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
       const modelHolder = new THREE.Group();
       modelHolder.add(model);
       orientSpinAxisToY(modelHolder);
-      // Rock Leone source mesh has the spin pole inverted vs Pegasus/L-Drago.
-      if (/leone/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
+      // Rock Leone / Flame Libra source meshes have the spin pole inverted vs Pegasus/L-Drago.
+      if (/leone|libra/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
 
       const box = new THREE.Box3().setFromObject(modelHolder);
       const size = box.getSize(new THREE.Vector3());

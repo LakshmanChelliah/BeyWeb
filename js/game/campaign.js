@@ -1,0 +1,87 @@
+import { getBeyById } from './beys.js';
+
+/** Opponents in rising difficulty (easiest → hardest). */
+export const CAMPAIGN_OPPONENT_IDS = Object.freeze(['leone', 'pegasus', 'libra', 'ldrago']);
+
+export const CAMPAIGN_STAGE_COUNT = CAMPAIGN_OPPONENT_IDS.length;
+
+const WINS_NEEDED = 2;
+
+export function createCampaign() {
+  let opponentIndex = 0;
+  let playerWins = 0;
+  let cpuWins = 0;
+  let active = false;
+
+  return {
+    start() {
+      opponentIndex = 0;
+      playerWins = 0;
+      cpuWins = 0;
+      active = true;
+    },
+
+    reset() {
+      opponentIndex = 0;
+      playerWins = 0;
+      cpuWins = 0;
+      active = false;
+    },
+
+    isActive() {
+      return active;
+    },
+
+    getOpponentIndex() {
+      return opponentIndex;
+    },
+
+    getAiTier() {
+      return opponentIndex;
+    },
+
+    getCurrentOpponent() {
+      return getBeyById(CAMPAIGN_OPPONENT_IDS[opponentIndex]);
+    },
+
+    getSeriesScore() {
+      return { player: playerWins, cpu: cpuWins };
+    },
+
+    /** @returns {'ongoing'|'player'|'cpu'} */
+    getSeriesStatus() {
+      if (playerWins >= WINS_NEEDED) return 'player';
+      if (cpuWins >= WINS_NEEDED) return 'cpu';
+      return 'ongoing';
+    },
+
+    recordMatch(winner) {
+      if (winner === 1) playerWins += 1;
+      else if (winner === 2) cpuWins += 1;
+    },
+
+    hasNextOpponent() {
+      return opponentIndex < CAMPAIGN_OPPONENT_IDS.length - 1;
+    },
+
+    advanceOpponent() {
+      if (opponentIndex >= CAMPAIGN_OPPONENT_IDS.length - 1) return false;
+      opponentIndex += 1;
+      playerWins = 0;
+      cpuWins = 0;
+      return true;
+    },
+
+    isCampaignComplete() {
+      return (
+        opponentIndex >= CAMPAIGN_OPPONENT_IDS.length - 1 &&
+        playerWins >= WINS_NEEDED
+      );
+    },
+
+    getRoundLabel() {
+      const total = playerWins + cpuWins + 1;
+      return `Match ${Math.min(total, 3)}`;
+    },
+  };
+}

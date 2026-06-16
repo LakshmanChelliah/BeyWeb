@@ -11,6 +11,9 @@ const _spinEuler = new THREE.Euler();
 const _axisX = new THREE.Vector3(1, 0, 0);
 const _axisY = new THREE.Vector3(0, 1, 0);
 
+/** Matches LIBRA_BUSTER_QUICKSAND_PULL in abilities.js — keep in sync. */
+const SONIC_QUICKSAND_PULL_MULT = 3.4;
+
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - clamp01(t), 3);
 }
@@ -86,12 +89,13 @@ export function resetTopWobble(body) {
  * Decays spin each frame. Higher stamina (0–100) slows the decay rate.
  * See staMult in stats.js: sta=100 → 0.5×, sta=0 → 1.5×.
  */
-export function decaySpin(spin, dt, sta = 50) {
+export function decaySpin(spin, dt, sta = 50, slowRate = 1) {
   const m = staMult(sta);
+  const rateMult = slowRate > 1 ? slowRate : 1;
   const rate =
     spin > CONFIG.STABLE_SPIN
-      ? CONFIG.SPIN_DECAY * 0.5 * m
-      : CONFIG.SPIN_DECAY * 2.4 * m;
+      ? CONFIG.SPIN_DECAY * 0.5 * m * rateMult
+      : CONFIG.SPIN_DECAY * 2.4 * m * rateMult;
   return Math.max(0, spin - rate * dt);
 }
 
@@ -133,7 +137,11 @@ export function syncTopVisual(group, body, spinPct, visualYaw, dt, spinSign = 1)
   const flightLift = body.userData.flightLift ?? 0;
   const flightTilt = body.userData.flightTilt ?? 0;
   const flightRoll = body.userData.flightRoll ?? 0;
-  group.position.set(body.position.x, body.position.y + yOff + flightLift, body.position.z);
+  group.position.set(
+    body.position.x,
+    body.position.y + yOff + flightLift,
+    body.position.z
+  );
 
   const scaleBoost = 1 + Math.min(0.35, (flightLift / 38) * 0.35);
   // Squash & stretch along the bey's spin axis (local Y). >1 stretches tall,
@@ -244,6 +252,7 @@ export function syncTopVisual(group, body, spinPct, visualYaw, dt, spinSign = 1)
       spinMult = base * (1 - tipGrow * 0.88);
     } else if (!dead) {
       spinMult = getVisualSpinMult(spinPct, wobbleActive, false);
+      spinMult *= body.userData.sonicBusterVisualSpinMult ?? 1;
     }
     visualYaw += CONFIG.MAX_SPIN * spinMult * spinSign * dt;
   }
@@ -372,10 +381,20 @@ export function applyCenterPull(body, spin) {
   const x = body.position.x;
   const z = body.position.z;
   const r = Math.hypot(x, z);
-  if (r < 0.01) return;
-  const strength = CONFIG.CENTER_PULL_FORCE * (r / CONFIG.ARENA_RADIUS);
+  const slow = body.userData.sonicSlow ?? 0;
+  if (r < 0.01 && slow <= 0) return;
+
+  let strength = CONFIG.CENTER_PULL_FORCE * (r / CONFIG.ARENA_RADIUS);
+  if (slow > 0) {
+    // Quicksand: minimum inward suck even at the pit center; scales up with depth in sand.
+    const depthPull = CONFIG.CENTER_PULL_FORCE * (0.3 + slow * 0.7);
+    strength = Math.max(strength, depthPull);
+    strength *= 1 + slow * SONIC_QUICKSAND_PULL_MULT;
+  }
+
+  const pullR = r < 0.12 ? 0.12 : r;
   body.applyForce(
-    new CANNON.Vec3((-x / r) * strength, 0, (-z / r) * strength),
+    new CANNON.Vec3((-x / pullR) * strength, 0, (-z / pullR) * strength),
     body.position
   );
 }

@@ -52,7 +52,7 @@ export const BEYS = Object.freeze([
     sta: 52,
     color: '#ef4444',
     model: 'meteo_ldrago.glb',
-    logo: 'MeteoLdragoLogo.png',
+    logo: 'updatedLdragoLogo.png',
     gimmicks: {
       power: 'ldrago_spin_steal',
       special: 'ldrago_supreme_flight',
@@ -81,6 +81,25 @@ export const BEYS = Object.freeze([
     available: true,
   },
   {
+    id: 'libra',
+    name: 'FLAME LIBRA',
+    type: 'Stamina',
+    desc: 'Benkei\'s endurance bey. Sonic Shield deflects rivals; Sonic Buster channels at center into a slowing sand pit.',
+    // Flame (ATK ** DEF * STA **), Libra ring, 145 track (STA **), ES tip (STA *****)
+    atk: 42,
+    def: 28,
+    sta: 88,
+    color: '#84cc16',
+    model: 'flame_libra.glb',
+    logo: 'flame_libralogo.png',
+    gimmicks: {
+      power: 'libra_sonic_shield',
+      special: 'libra_sonic_buster',
+      passive: null,
+    },
+    available: true,
+  },
+  {
     id: 'sagittario',
     name: '???',
     type: '???',
@@ -102,7 +121,7 @@ export const BEYS = Object.freeze([
     sta: null,
     color: '#4b5563',
     model: 'earth_eagle.glb',
-    available: false,
+    available: true,
   },
   {
     id: 'bull',
@@ -114,12 +133,20 @@ export const BEYS = Object.freeze([
     sta: null,
     color: '#4b5563',
     model: 'dark_bull.glb',
-    available: false,
+    available: true,
   },
 ]);
 
 /** Beys that can actually be picked in the selection screen. */
 export const PLAYABLE_BEYS = Object.freeze(BEYS.filter((b) => b.available));
+
+/** Picks a random playable bey that is not the excluded one (for CPU rivals). */
+export function pickOpponentBey(excludedBey) {
+  const excludeId = typeof excludedBey === 'string' ? excludedBey : excludedBey?.id;
+  const pool = PLAYABLE_BEYS.filter((b) => b.id !== excludeId);
+  if (pool.length === 0) return PLAYABLE_BEYS[0] ?? null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 /** Converts a roster `color` CSS hex string to a numeric THREE color. */
 export function beyColorHex(color) {

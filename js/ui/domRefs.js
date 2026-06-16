@@ -5,6 +5,8 @@ export function queryGameUi({ controlsHintId, playerAbilitiesId, aiAbilitiesId =
     gameoverOverlay: document.getElementById('gameover-overlay'),
     btnStart: document.getElementById('btn-start'),
     btnRestart: document.getElementById('btn-restart'),
+    btnChangeBey: document.getElementById('btn-change-bey'),
+    btnRecalibrate: document.getElementById('btn-recalibrate'),
     playerSpinEl: document.getElementById('player-spin'),
     aiSpinEl: document.getElementById('ai-spin'),
     playerBar: document.getElementById('player-bar'),
