@@ -4,7 +4,8 @@
  *
  * Two separate ATK multipliers serve different purposes:
  *
- *   atkSpeedMult  — steers force (wide range 0.20–1.80 so speed feels distinct)
+ *   moveSpeedMult — steer force (wide range 0.20–1.80 so speed feels distinct)
+ *   atkSpeedMult  — alias of moveSpeedMult (legacy name)
  *   atkCombatMult — knockback & spin drain (symmetric with defMult, range 0.50–1.50
  *                   so an ATK=100 bey exactly cancels a DEF=100 bey at parity)
  *
@@ -14,8 +15,14 @@
  */
 
 /** Steer-force multiplier — wide range so Pegasus feels noticeably faster. */
+export function moveSpeedMult(beyStats) {
+  const move = beyStats?.move ?? beyStats?.atk ?? 50;
+  return 0.2 + move / 62.5;   // 0.20 → 1.80
+}
+
+/** @deprecated Use moveSpeedMult — kept for callers that still import atkSpeedMult. */
 export function atkSpeedMult(beyStats) {
-  return 0.2 + (beyStats?.atk ?? 50) / 62.5;   // 0.20 → 1.80
+  return moveSpeedMult(beyStats);
 }
 
 /** Combat multiplier for knockback and spin loss dealt on impact. */

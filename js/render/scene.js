@@ -66,14 +66,15 @@ export function updateCamera(camera, state, mode, cameraCue = 0) {
   const cue = typeof cameraCue === 'number' ? { lift: cameraCue, stabilized: false } : cameraCue;
   const lift = Math.min(cue.lift ?? 0, 45);
   const stabilized = cue.stabilized ?? false;
-  const camY = 24 + lift * 0.5;
-  const lookY = lift * 0.38;
-  const camZ = 20 + lift * 0.1;
   const lerp = stabilized ? 0.04 : lift > 0.5 ? 0.12 : 0.06;
+
+  const camY = cue.camY ?? 24 + lift * 0.5;
+  const lookY = cue.lookY ?? lift * 0.38;
+  const camZ = cue.camZ ?? 20 + lift * 0.1;
 
   let midX;
   let midZ;
-  if (stabilized && cue.focusX != null && cue.focusZ != null) {
+  if (cue.focusX != null && cue.focusZ != null) {
     midX = cue.focusX;
     midZ = cue.focusZ;
   } else if (mode === 'pc' && state.aiBody) {
@@ -82,12 +83,6 @@ export function updateCamera(camera, state, mode, cameraCue = 0) {
   } else {
     midX = state.playerBody.position.x;
     midZ = state.playerBody.position.z;
-  }
-
-  if (mode === 'pc' && state.aiBody) {
-    camera.position.lerp(new THREE.Vector3(midX, camY, midZ + camZ), lerp);
-    camera.lookAt(midX, lookY, midZ);
-    return;
   }
 
   camera.position.lerp(new THREE.Vector3(midX, camY, midZ + camZ), lerp);

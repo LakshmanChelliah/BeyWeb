@@ -83,6 +83,8 @@ export function resetTopWobble(body) {
   delete body.userData.lastWobbleAmp;
   delete body.userData.lastSpinMult;
   delete body.userData.deathBaseSpin;
+  delete body.userData.ringOut;
+  delete body.userData.ringOutT;
 }
 
 /**
@@ -105,6 +107,7 @@ export function launchSpinScale(launchGrace) {
 }
 
 export function stabilizeTop(body, spinPct, spinSign, launchGrace) {
+  if (body?.userData?.bullFlipPhase) return;
   const scaledSpin = spinPct * launchSpinScale(launchGrace);
   const targetRate = CONFIG.MAX_SPIN * scaledSpin * spinSign;
 
@@ -159,9 +162,12 @@ export function syncTopVisual(group, body, spinPct, visualYaw, dt, spinSign = 1)
     });
   }
 
-  // Hold yaw during the dive so the pitched underside stays readable.
+  // Hold yaw during cinematic moves (abilities, bull-flip knockdown, etc.).
   const inCinematic =
-    flightLift > 0.5 || Math.abs(flightTilt) > 0.05 || Math.abs(flightRoll) > 0.05;
+    body.userData.bullFlipPhase != null ||
+    flightLift > 0.5 ||
+    Math.abs(flightTilt) > 0.05 ||
+    Math.abs(flightRoll) > 0.05;
 
   let tiltX = flightTilt;
   let tiltZ = flightRoll;
@@ -288,7 +294,7 @@ export function clampLaunchSpeed(body, launchGrace) {
 
 /** Bleeds XZ drift as spin runs out; fully locks once spin hits 0%. */
 export function settleSleepingTop(body, spinPct) {
-  if (!body || body.userData.airborne) return;
+  if (!body || body.userData.airborne || body.userData.bullFlipPhase) return;
 
   if (spinPct <= CONFIG.SPIN_STOPPED) {
     body.velocity.set(0, 0, 0);
@@ -309,8 +315,12 @@ export function settleSleepingTop(body, spinPct) {
 
 /** Keeps flat-disc tops resting on the arena floor */
 export function pinTopToFloor(body) {
-  if (body.userData.airborne) return;
+  if (body.userData.airborne || body.userData.bullFlipPhase) return;
   const radius = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  if (body.userData.ringOut) {
+    const dist = Math.hypot(body.position.x, body.position.z);
+    if (dist + radius > CONFIG.PLATFORM_OUTER_RADIUS) return;
+  }
   const targetY = CONFIG.FLOOR_Y + radius + CONFIG.FLOOR_EPSILON;
   if (body.position.y < targetY) {
     body.position.y = targetY;
@@ -377,7 +387,7 @@ export function createTopPhysicsBody(world, topMaterial, x, z, collisionGroup, p
  */
 export function applyCenterPull(body, spin) {
   if (!body || spin < CONFIG.SLEEP_THRESHOLD) return;
-  if (body.userData.airborne) return;
+  if (body.userData.airborne || body.userData.ringOut) return;
   const x = body.position.x;
   const z = body.position.z;
   const r = Math.hypot(x, z);
@@ -450,7 +460,7 @@ export function settleSpawnedTops(world, state) {
  */
 export function resolveWallClipping(bodyA, bodyB) {
   for (const body of [bodyA, bodyB]) {
-    if (!body || body.userData.collisionsDisabled) continue;
+    if (!body || body.userData.collisionsDisabled || body.userData.ringOut) continue;
     const x = body.position.x;
     const z = body.position.z;
     const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;

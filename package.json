@@ -6,11 +6,21 @@
   "scripts": {
     "color-leone": "node scripts/color-rock-leone.mjs",
     "color-libra": "node scripts/color-flame-libra.mjs",
+    "color-bull": "node scripts/color-dark-bull.mjs",
+    "build-bull-logo": "node scripts/build-darkbull-logo.mjs",
     "recolor-leone": "node scripts/recolor-leone-top.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
+    "jpeg-js": "^0.4.4",
+    "meshoptimizer": "^1.1.1",
+    "pngjs": "^7.0.0"
+  }
 }

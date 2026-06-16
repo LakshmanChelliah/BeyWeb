@@ -15,6 +15,11 @@ export function isRingOut(x, z, outerRadius) {
   return false;
 }
 
+/** Returns true when a bey has left the white outer platform. */
+export function isPlatformOut(x, z, outerRadius) {
+  return Math.hypot(x, z) + outerRadius > CONFIG.PLATFORM_OUTER_RADIUS;
+}
+
 /** Returns true when bey is still inside the playable flat ring */
 export function isInsideRing(x, z, outerRadius) {
   return Math.hypot(x, z) + outerRadius < CONFIG.WALL_RADIUS;

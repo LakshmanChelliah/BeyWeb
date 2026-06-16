@@ -1,11 +1,11 @@
 import * as CANNON from 'cannon-es';
-import { atkSpeedMult } from '../game/stats.js';
+import { moveSpeedMult } from '../game/stats.js';
 
 const _force = new CANNON.Vec3();
 
 export function computeSteerForce(body, spin, baseForce) {
   const steerMult = body.userData.steerMult ?? 1;
-  return baseForce * spin * atkSpeedMult(body.userData.beyStats) * steerMult;
+  return baseForce * spin * moveSpeedMult(body.userData.beyStats) * steerMult;
 }
 
 export function applySteerForce(

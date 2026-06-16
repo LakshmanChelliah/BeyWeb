@@ -9,7 +9,8 @@
  * Stats are sourced from official Takara Tomy / Hasbro part-by-part star ratings
  * (Energy Ring + Fusion Wheel + Spin Track + Performance Tip), normalized to 0–100.
  *
- * atk — scales steer force and knockback dealt on impact
+ * atk — scales knockback dealt on impact
+ * move — optional steer-force stat (defaults to atk when omitted)
  * def — reduces knockback and spin loss received on impact
  * sta — slows the passive spin-decay rate
  *
@@ -125,14 +126,22 @@ export const BEYS = Object.freeze([
   },
   {
     id: 'bull',
-    name: '???',
-    type: '???',
-    desc: 'This bey is not available yet.',
-    atk: null,
-    def: null,
-    sta: null,
-    color: '#4b5563',
+    name: 'DARK BULL',
+    type: 'Attack',
+    desc: 'Maximum Stampede boosts speed and contact knockback; Red Horn Uppercut charges and launches foes — strongest near the rim.',
+    // Bull / Dark wheel (ATK ***), Bull ring, 145 track, HF hole flat
+    atk: 78,
+    move: 18, // steering matches Rock Leone; atk still drives knockback
+    def: 38,
+    sta: 34,
+    color: '#dc2626',
     model: 'dark_bull.glb',
+    logo: 'darkbull_logo.png',
+    gimmicks: {
+      power: 'bull_maximum_stampede',
+      special: 'bull_red_horn_uppercut',
+      passive: null,
+    },
     available: true,
   },
 ]);

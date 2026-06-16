@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 
 const DISH_RADIUS = CONFIG.WALL_RADIUS + 0.15;
-const PLATFORM_OUTER_RADIUS = CONFIG.ARENA_RADIUS + 4.0;
+const PLATFORM_OUTER_RADIUS = CONFIG.PLATFORM_OUTER_RADIUS;
 
 const COLORS = {
   dishCenter: '#43464d',

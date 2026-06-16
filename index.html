@@ -32,6 +32,11 @@
 
   <div id="campaign-hud" class="campaign-hud hidden" aria-live="polite"></div>
 
+  <div id="mode-bar" class="pc-mode-bar">
+    <button type="button" id="mode-casual" class="pc-mode-btn">Casual</button>
+    <button type="button" id="mode-tournament" class="pc-mode-btn active">Tournament</button>
+  </div>
+
   <div id="tilt-hint">Tilt phone to steer · Tap a move button to unleash a gimmick</div>
 
   <div id="player-abilities" class="ability-bar ability-bar-right"></div>
@@ -43,7 +48,7 @@
   <div id="start-overlay">
     <div class="logo-ring"></div>
     <h1>Spin Sumo</h1>
-    <p>CPU campaign — best of 3 against each rival. Win the series to face the next, tougher bey!</p>
+    <p id="start-blurb">Tournament — best of 3 against each rival in order. Beat all five to become champion!</p>
     <button id="btn-start">Calibrate &amp; Start</button>
     <p id="permission-hint">Requires motion sensor access on iOS. Hold phone flat when starting.</p>
   </div>

@@ -6,10 +6,11 @@ const _force = new CANNON.Vec3();
 
 /** Per-tier tuning — opponent index 0 is easiest; one tier per campaign stage. */
 const AI_TIERS = [
-  { forceMult: 0.82, decisionInterval: 0.32, specialReach: 4.2, powerReach: 6.5 },
-  { forceMult: 1.0, decisionInterval: 0.22, specialReach: 5.0, powerReach: 8.0 },
-  { forceMult: 1.12, decisionInterval: 0.18, specialReach: 5.8, powerReach: 8.5 },
-  { forceMult: 1.22, decisionInterval: 0.14, specialReach: 6.8, powerReach: 9.5 },
+  { forceMult: 0.78, decisionInterval: 0.34, specialReach: 3.8, powerReach: 6.0 },  // Dark Bull
+  { forceMult: 0.92, decisionInterval: 0.26, specialReach: 4.6, powerReach: 7.0 },  // Flame Libra
+  { forceMult: 1.05, decisionInterval: 0.20, specialReach: 5.4, powerReach: 8.0 },  // Rock Leone
+  { forceMult: 1.18, decisionInterval: 0.16, specialReach: 6.2, powerReach: 9.0 },  // Storm Pegasus
+  { forceMult: 1.32, decisionInterval: 0.12, specialReach: 7.2, powerReach: 10.0 }, // Meteo L-Drago
 ];
 
 let _tier = 1;

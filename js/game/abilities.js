@@ -55,6 +55,10 @@ const STAR_SETTLE_WOBBLES = 3;       // gentle sways over the settle (slower = f
 const STAR_SETTLE_WOBBLE_AMP = 0.08; // radians, kept subtle
 const STAR_BLAST_HIT_SPIN = 0.24;    // opponent spin loss on a connected slam
 const STAR_BLAST_MISS_SELF = 0.05;   // self spin loss when the dive whiffs
+// Star Blast camera: full stadium in frame at normal FOV, walls + a little sky above.
+const STAR_BLAST_CAM_Y = 28;
+const STAR_BLAST_CAM_Z = 24;
+const STAR_BLAST_CAM_LOOK_Y = 1.5;
 const SLAM_IMPULSE_MULT = 2.6;
 const SLAM_SPIN_MULT = 2.4;
 const SLAM_SELF_IMPULSE = 0.25;
@@ -99,6 +103,34 @@ const LIBRA_BUSTER_QUICKSAND_PULL = 3.4;
 const LIBRA_BUSTER_QUICKSAND_SINK = 14;
 const LIBRA_BUSTER_DAMAGE_TAKEN = 0.1;
 
+// Dark Bull — Maximum Stampede + Red Horn Uppercut (attack-tuned).
+export const BULL_STAMPEDE_DURATION = 3;
+const BULL_STAMPEDE_KB_OUT = 1.35;
+const BULL_STAMPEDE_STEER = 1.35;
+export const BULL_UPPERCUT_DURATION = 9;
+export const BULL_UPPERCUT_WINDUP = 0.65;
+export const BULL_DASH_BUILD_DUR = 0.55;
+export const BULL_CHARGE_DUR = BULL_DASH_BUILD_DUR;
+const BULL_DASH_SPEED = 19.5;
+const BULL_DASH_LEAN = 0.36;
+const BULL_COAST_ARRIVE = 0.45;
+const BULL_RECOVER_DUR = 0.45;
+const BULL_UPPERCUT_BASE_KB = 2.4;
+const BULL_UPPERCUT_SPIN_MIN = 0.25;
+const BULL_UPPERCUT_SPIN_MAX = 0.30;
+const BULL_UPPERCUT_MISS_SELF = 0.04;
+const BULL_AIR_RISE_DUR = 0.88;
+const BULL_AIR_GRAVITY = 24;
+const BULL_AIR_WOBBLE_AMP = 0.2;
+const BULL_AIR_WOBBLE_RATE = 7.8;
+export const BULL_FLIP_DUR = BULL_AIR_RISE_DUR + 1.5;
+
+export function isBullFlipActive(body) {
+  return body?.userData?.bullFlipPhase != null;
+}
+const BULL_UPPERCUT_SLAM_MULT = 1.2;
+const BULL_UPPERCUT_LIFT = 14;
+
 function groundY(body) {
   const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
   return CONFIG.FLOOR_Y + r + CONFIG.FLOOR_EPSILON;
@@ -109,6 +141,8 @@ const easeInQuad = (t) => t * t;
 const easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 const easeInCubic = (t) => t * t * t;
+const easeInOutCubic = (t) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOutBack = (t) => {
   const c1 = 1.70158;
   const c3 = c1 + 1;
@@ -118,8 +152,10 @@ const easeOutBack = (t) => {
 const dampedWobble = (t) => Math.cos(t * Math.PI * 3.2) * Math.pow(1 - t, 2.2);
 
 function setAirborneKinematic(body) {
-  body.userData._prevBodyType = body.type;
-  body.type = CANNON.Body.KINEMATIC;
+  if (body.type !== CANNON.Body.KINEMATIC) {
+    body.userData._prevBodyType = body.type;
+    body.type = CANNON.Body.KINEMATIC;
+  }
   body.velocity.set(0, 0, 0);
   body.angularVelocity.set(0, 0, 0);
 }
@@ -176,6 +212,79 @@ function homingXZ(body, opp, rate) {
   const t = Math.min(1, rate);
   body.position.x += (opp.position.x - body.position.x) * t;
   body.position.z += (opp.position.z - body.position.z) * t;
+}
+
+/** Set dash heading toward the opponent, target on the far stadium wall. */
+function initBullDashTarget(body, opp) {
+  const fromX = body.userData.bullChargeFromX ?? body.position.x;
+  const fromZ = body.userData.bullChargeFromZ ?? body.position.z;
+  let nx = (opp?.position.x ?? body.position.x) - fromX;
+  let nz = (opp?.position.z ?? body.position.z) - fromZ;
+  const d = Math.hypot(nx, nz);
+  if (d < 0.05) {
+    const yaw = Math.atan2(body.position.z, body.position.x);
+    nx = Math.cos(yaw);
+    nz = Math.sin(yaw);
+  } else {
+    nx /= d;
+    nz /= d;
+  }
+  body.userData.bullCoastNx = nx;
+  body.userData.bullCoastNz = nz;
+
+  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const maxR = CONFIG.WALL_RADIUS - r - 0.04;
+  const angle = Math.atan2(nz, nx);
+  body.userData.bullCoastTargetX = Math.cos(angle) * maxR;
+  body.userData.bullCoastTargetZ = Math.sin(angle) * maxR;
+  body.userData.bullCoastDist = Math.hypot(
+    body.userData.bullCoastTargetX - body.position.x,
+    body.userData.bullCoastTargetZ - body.position.z
+  );
+}
+
+/** Constant-speed dash; returns true once the far wall is reached. */
+function stepBullDash(state, side, body, opp, dt) {
+  if (body.userData.bullCoastTargetX == null) initBullDashTarget(body, opp);
+
+  const tx = body.userData.bullCoastTargetX;
+  const tz = body.userData.bullCoastTargetZ;
+  const dx = tx - body.position.x;
+  const dz = tz - body.position.z;
+  const remain = Math.hypot(dx, dz);
+
+  body.userData.bullUpperPhaseT = (body.userData.bullUpperPhaseT ?? 0) + dt;
+  body.userData.bullUpperSlamming = true;
+  body.position.y = groundY(body);
+
+  if (remain < BULL_COAST_ARRIVE) {
+    body.position.x = tx;
+    body.position.z = tz;
+    return true;
+  }
+
+  const move = Math.min(BULL_DASH_SPEED * dt, remain);
+  body.position.x += (dx / remain) * move;
+  body.position.z += (dz / remain) * move;
+
+  if (opp && bullUppercutOverlap(body, opp) && !opp.userData.bullFlipPhase) {
+    applyBullUppercutHit(state, side, body, opp);
+  }
+
+  return false;
+}
+
+function stepBullUppercutDash(state, dt) {
+  for (const side of ['player', 'ai']) {
+    const spSlot = state.abilities?.[side]?.special;
+    if (!spSlot?.active || spSlot.ability.id !== 'bull_red_horn_uppercut') continue;
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
+    if (!body || body.userData.bullUpperPhase !== 'dash') continue;
+    if (stepBullDash(state, side, body, opp, dt)) {
+      body.userData.bullDashDone = true;
+    }
+  }
 }
 
 /** Cinematic knockback for Pegasus (velocity zeroed each frame during Star Blast). */
@@ -362,6 +471,254 @@ function clearLibraBusterVibrate(body) {
   delete body.userData.sonicBusterVisualSpinMult;
   delete body.userData.sonicBusterFromX;
   delete body.userData.sonicBusterFromZ;
+}
+
+function bullUppercutKbScale(victim) {
+  const dist = Math.hypot(victim.position.x, victim.position.z);
+  const t = clamp01(dist / (CONFIG.ARENA_RADIUS * 0.92));
+  return 0.42 + t * 0.83;
+}
+
+function bullUppercutSpinLoss(victim) {
+  const dist = Math.hypot(victim.position.x, victim.position.z);
+  const t = clamp01(dist / (CONFIG.ARENA_RADIUS * 0.92));
+  return BULL_UPPERCUT_SPIN_MIN + t * (BULL_UPPERCUT_SPIN_MAX - BULL_UPPERCUT_SPIN_MIN);
+}
+
+function bullUppercutOverlap(body, opp) {
+  if (!body || !opp) return false;
+  const dx = body.position.x - opp.position.x;
+  const dz = body.position.z - opp.position.z;
+  const rA = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const reach = rA + rB;
+  return dx * dx + dz * dz <= reach * reach;
+}
+
+function applyBullUppercutHit(state, attackerSide, attacker, victim) {
+  if (!attacker || !victim || victim.userData.invulnerable) return;
+  if (victim.userData.bullFlipPhase) return;
+  if (!attacker.userData.bullUpperHit) attacker.userData.bullUpperHit = true;
+
+  let dx = victim.position.x - attacker.position.x;
+  let dz = victim.position.z - attacker.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  const nx = dx / d;
+  const nz = dz / d;
+  const kb = BULL_UPPERCUT_BASE_KB * bullUppercutKbScale(victim);
+
+  const oppSide = attackerSide === 'player' ? 'ai' : 'player';
+  const k = spinKey(oppSide);
+  state[k] = Math.max(0, state[k] - bullUppercutSpinLoss(victim));
+
+  const posScale = bullUppercutKbScale(victim);
+
+  victim.userData.bullFlipFromX = victim.position.x;
+  victim.userData.bullFlipFromZ = victim.position.z;
+  victim.userData.bullFlipKbNx = nx;
+  victim.userData.bullFlipKbNz = nz;
+  victim.userData.bullFlipKbMag = kb;
+  victim.userData.bullFlipPhase = 'air';
+  victim.userData.bullFlipPhaseT = 0;
+  victim.userData.bullFlipElapsed = 0;
+  delete victim.userData.bullFlipFalling;
+  delete victim.userData.bullFlipVY;
+  delete victim.userData.bullFlipWobbleT;
+  victim.userData.bullFlipPeakLift = BULL_UPPERCUT_LIFT * posScale;
+  victim.userData.flightTilt = 0;
+  victim.userData.flightRoll = 0;
+  victim.userData.flightLift = 0;
+  victim.userData.flightSquash = 1.04;
+  victim.userData.airborne = true;
+  victim.userData.controlLocked = true;
+  victim.userData.bullFlipBurstT = 1;
+  setBodyCollisions(victim, false);
+  setAirborneKinematic(victim);
+  victim.velocity.set(0, 0, 0);
+  victim.angularVelocity.set(0, 0, 0);
+
+  attacker.userData.bullImpactFlash = true;
+  attacker.userData.bullImpactX = (attacker.position.x + victim.position.x) * 0.5;
+  attacker.userData.bullImpactZ = (attacker.position.z + victim.position.z) * 0.5;
+}
+
+function resolveBullUppercutOutcome(state, side, body) {
+  if (!body || body.userData.bullUpperResolved) return;
+  body.userData.bullUpperResolved = true;
+  if (!body.userData.bullUpperHit) {
+    const k = spinKey(side);
+    state[k] = Math.max(0, state[k] - BULL_UPPERCUT_MISS_SELF);
+  }
+}
+
+function initBullUppercut(body) {
+  body.userData.bullUpperPhase = 'windup';
+  body.userData.bullUpperPhaseT = 0;
+  body.userData.bullUpperHit = false;
+  body.userData.bullImpactFlash = false;
+  delete body.userData.bullUpperResolved;
+  setBodyCollisions(body, false);
+}
+
+function clearBullUppercutMotion(body) {
+  body.userData.flightLift = 0;
+  body.userData.flightTilt = 0;
+  body.userData.flightRoll = 0;
+  body.userData.flightSquash = 1;
+  body.userData.bullUpperSlamming = false;
+  body.userData.bullImpactFlash = false;
+  delete body.userData.bullUpperPhase;
+  delete body.userData.bullUpperPhaseT;
+  delete body.userData.bullUpperHit;
+  delete body.userData.bullUpperResolved;
+  delete body.userData.bullChargeFromX;
+  delete body.userData.bullChargeFromZ;
+  delete body.userData.bullImpactX;
+  delete body.userData.bullImpactZ;
+  delete body.userData.bullImpactResolved;
+  delete body.userData.bullImpactFromTilt;
+  delete body.userData.bullImpactFromSquash;
+  delete body.userData.bullRecoverFromTilt;
+  delete body.userData.bullRecoverFromSquash;
+  delete body.userData.bullCoastNx;
+  delete body.userData.bullCoastNz;
+  delete body.userData.bullCoastTargetX;
+  delete body.userData.bullCoastTargetZ;
+  delete body.userData.bullCoastDist;
+  delete body.userData.bullDashDone;
+  delete body.userData.bullWindupEndTilt;
+}
+
+function releaseBullUppercutControl(body) {
+  if (!body) return;
+  body.userData.controlLocked = false;
+  body.userData.airborne = false;
+  clearBullUppercutMotion(body);
+  setBodyCollisions(body, true);
+  if (body.type === CANNON.Body.KINEMATIC) {
+    restoreDynamicBody(body);
+  }
+  body.position.y = groundY(body);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+}
+
+function finishBullUppercut(state, side, slot, body, dt) {
+  if (!body || (!slot.active && body.userData.bullUpperPhase == null)) return;
+  resolveBullUppercutOutcome(state, side, body);
+  slot.active = false;
+  slot.activeRemaining = 0;
+  slot.windupRemaining = 0;
+  if (slot.ability.onEnd) slot.ability.onEnd(makeCtx(state, side, dt));
+}
+
+function clearBullFlipCinematic(body) {
+  if (!body) return;
+  delete body.userData.bullFlipPhase;
+  delete body.userData.bullFlipPhaseT;
+  delete body.userData.bullFlipFalling;
+  delete body.userData.bullFlipVY;
+  delete body.userData.bullFlipWobbleT;
+  delete body.userData.bullFlipPeakLift;
+  delete body.userData.bullFlipFromX;
+  delete body.userData.bullFlipFromZ;
+  delete body.userData.bullFlipKbNx;
+  delete body.userData.bullFlipKbNz;
+  delete body.userData.bullFlipKbMag;
+  delete body.userData.bullFlipElapsed;
+  delete body.userData.bullUppercutFlipT;
+  delete body.userData.bullFlipBurstT;
+  body.userData.airborne = false;
+}
+
+function releaseBullFlipVictim(body, applyKb = true) {
+  if (!body) return;
+  if (applyKb && (body.userData.bullFlipKbMag ?? 0) > 0) {
+    applyPhysicsKnockback(
+      body,
+      body.userData.bullFlipKbNx ?? 0,
+      body.userData.bullFlipKbNz ?? 0,
+      body.userData.bullFlipKbMag * 0.2
+    );
+  }
+  body.userData.controlLocked = false;
+  body.userData.airborne = false;
+  body.userData.flightLift = 0;
+  body.userData.flightTilt = 0;
+  body.userData.flightRoll = 0;
+  body.userData.flightSquash = 1;
+  clearBullFlipCinematic(body);
+  setBodyCollisions(body, true);
+  if (body.type === CANNON.Body.KINEMATIC) restoreDynamicBody(body);
+  body.position.y = groundY(body);
+}
+
+function pinBullFlipPhysics(body) {
+  if (!body?.userData?.bullFlipPhase) return;
+  if (body.type !== CANNON.Body.KINEMATIC) setAirborneKinematic(body);
+  setBodyCollisions(body, false);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+  body.position.y = groundY(body);
+}
+
+function tickBullFlipDecay(body, dt) {
+  if (body.userData.bullFlipBurstT != null) {
+    body.userData.bullFlipBurstT -= dt * 5;
+    if (body.userData.bullFlipBurstT <= 0) delete body.userData.bullFlipBurstT;
+  }
+
+  if (!body.userData.bullFlipPhase) return;
+
+  pinBullFlipPhysics(body);
+  body.userData.airborne = true;
+  body.userData.controlLocked = true;
+  body.userData.bullFlipElapsed = (body.userData.bullFlipElapsed ?? 0) + dt;
+  body.userData.bullFlipPhaseT = (body.userData.bullFlipPhaseT ?? 0) + dt;
+
+  const peakLift = body.userData.bullFlipPeakLift ?? BULL_UPPERCUT_LIFT;
+
+  if (!body.userData.bullFlipFalling) {
+    const t = clamp01(body.userData.bullFlipPhaseT / BULL_AIR_RISE_DUR);
+    const e = easeOutCubic(t);
+    body.userData.flightLift = peakLift * Math.sin(e * Math.PI * 0.5);
+    if (t >= 1) body.userData.bullFlipFalling = true;
+  } else {
+    let vy = body.userData.bullFlipVY ?? 0;
+    vy -= BULL_AIR_GRAVITY * dt;
+    let lift = (body.userData.flightLift ?? 0) + vy * dt;
+    if (lift <= 0) {
+      body.userData.flightLift = 0;
+      body.userData.flightTilt = 0;
+      body.userData.flightRoll = 0;
+      body.userData.flightSquash = 1;
+      releaseBullFlipVictim(body, true);
+      return;
+    }
+    body.userData.bullFlipVY = vy;
+    body.userData.flightLift = lift;
+  }
+
+  const lift = body.userData.flightLift ?? 0;
+  const airFrac = clamp01(lift / Math.max(peakLift * 0.22, 0.5));
+  const wobbleT = (body.userData.bullFlipWobbleT ?? 0) + dt;
+  body.userData.bullFlipWobbleT = wobbleT;
+  const amp = BULL_AIR_WOBBLE_AMP * airFrac;
+  const wobbleWave = Math.sin(wobbleT * BULL_AIR_WOBBLE_RATE);
+  const wobbleWave2 = Math.sin(wobbleT * BULL_AIR_WOBBLE_RATE * 0.83 + 0.6);
+  body.userData.flightTilt = amp * wobbleWave;
+  body.userData.flightRoll = amp * wobbleWave2;
+  body.userData.flightSquash = 1 + 0.03 * airFrac * Math.sin(wobbleT * BULL_AIR_WOBBLE_RATE * 1.6);
+
+  const kb = body.userData.bullFlipKbMag ?? 0;
+  if (kb > 0) {
+    const p = easeOutQuad(clamp01(body.userData.bullFlipElapsed / BULL_FLIP_DUR));
+    const fromX = body.userData.bullFlipFromX ?? body.position.x;
+    const fromZ = body.userData.bullFlipFromZ ?? body.position.z;
+    const dist = kb * 0.32;
+    body.position.x = fromX + (body.userData.bullFlipKbNx ?? 0) * dist * p;
+    body.position.z = fromZ + (body.userData.bullFlipKbNz ?? 0) * dist * p;
+  }
 }
 
 function isLibraBusterChannelingBody(state, body) {
@@ -784,6 +1141,80 @@ export const ABILITY_REGISTRY = {
       clearSonicSlow(ctx.state.aiBody);
     },
   },
+
+  bull_maximum_stampede: {
+    id: 'bull_maximum_stampede',
+    name: 'Maximum Stampede',
+    slot: 'power',
+    icon: '\u25C8',
+    desc: 'Charges through rivals — a modest knockback boost on contact.',
+    charge: 6.5,
+    cooldown: 9,
+    duration: BULL_STAMPEDE_DURATION,
+    windup: 0,
+    glow: '#ef4444',
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.stampeding = true;
+      b.userData.stampedeT = 0;
+      b.userData.steerMult = BULL_STAMPEDE_STEER;
+      b.userData.prevDamping = b.linearDamping;
+      b.linearDamping = Math.max(0.05, b.linearDamping * 0.65);
+    },
+    onStep(ctx) {
+      const b = ctx.body;
+      if (!b.userData.stampeding) return;
+      const vx = b.velocity.x;
+      const vz = b.velocity.z;
+      const len = Math.hypot(vx, vz);
+      if (len > 0.5) {
+        const bias = 1.35 * ctx.dt;
+        b.velocity.x += (vx / len) * bias;
+        b.velocity.z += (vz / len) * bias;
+      }
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      b.userData.stampeding = false;
+      b.userData.steerMult = 1;
+      delete b.userData.stampedeT;
+      if (b.userData.prevDamping != null) b.linearDamping = b.userData.prevDamping;
+      b.userData.flightSquash = 1;
+      b.userData.flightTilt = 0;
+    },
+  },
+
+  bull_red_horn_uppercut: {
+    id: 'bull_red_horn_uppercut',
+    name: 'Red Horn Uppercut',
+    slot: 'special',
+    icon: '\u25B2',
+    desc: 'Lower horns, then charge — launches foes outward; strongest near the rim.',
+    charge: 10,
+    cooldown: 12,
+    duration: BULL_UPPERCUT_DURATION,
+    windup: BULL_UPPERCUT_WINDUP,
+    glow: '#dc2626',
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.airborne = true;
+      b.userData.controlLocked = true;
+      b.userData.bullUpperPhase = 'dash';
+      b.userData.bullUpperPhaseT = 0;
+      b.userData.bullUpperHit = false;
+      b.userData.bullImpactFlash = false;
+      delete b.userData.bullImpactResolved;
+      delete b.userData.bullDashDone;
+      b.userData.bullChargeFromX = b.position.x;
+      b.userData.bullChargeFromZ = b.position.z;
+      initBullDashTarget(b, ctx.opponentBody);
+      setAirborneKinematic(b);
+      setBodyCollisions(b, false);
+    },
+    onEnd(ctx) {
+      releaseBullUppercutControl(ctx.body);
+    },
+  },
 };
 
 // ---- runtime ----------------------------------------------------------------
@@ -901,6 +1332,13 @@ export function triggerAbility(state, side, slotName) {
         body.velocity.set(0, 0, 0);
       }
     }
+    if (ability.id === 'bull_red_horn_uppercut') {
+      const body = side === 'player' ? state.playerBody : state.aiBody;
+      if (body) {
+        body.userData.controlLocked = true;
+        initBullUppercut(body);
+      }
+    }
   } else {
     activateSlot(state, side, slot);
   }
@@ -910,6 +1348,9 @@ export function triggerAbility(state, side, slotName) {
 /** Per physics step: drive active abilities that move the body (airborne homing). */
 export function stepAbilities(state, dt) {
   if (!state.abilities) return;
+  tickBullFlipDecay(state.playerBody, dt);
+  tickBullFlipDecay(state.aiBody, dt);
+  stepBullUppercutDash(state, dt);
   stepLibraBusterChannel(state, dt);
   for (const side of ['player', 'ai']) {
     const runtime = state.abilities[side];
@@ -1241,6 +1682,97 @@ export function tickLeoneAbilityVisuals(state, dt) {
   }
 }
 
+/**
+ * Per-frame visual animation for Dark Bull's stampede and uppercut.
+ */
+export function tickBullAbilityVisuals(state, dt) {
+  if (!state.abilities) return;
+
+  for (const side of ['player', 'ai']) {
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
+    if (!body) continue;
+    const runtime = state.abilities[side];
+    if (!runtime) continue;
+
+    const pwSlot = runtime.power;
+    if (pwSlot?.active && pwSlot.ability.id === 'bull_maximum_stampede') {
+      const t = body.userData.stampedeT ?? 0;
+      body.userData.stampedeT = t + dt;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 9);
+      body.userData.flightSquash = 1 - 0.05 * pulse;
+      body.userData.flightTilt = 0.04 * pulse;
+    }
+
+    const spSlot = runtime.special;
+    if (!spSlot || spSlot.ability.id !== 'bull_red_horn_uppercut') continue;
+
+    const inMove =
+      spSlot.windupRemaining > 0 ||
+      spSlot.active ||
+      body.userData.bullUpperPhase != null;
+    if (!inMove) continue;
+
+    const floor = groundY(body);
+    body.position.y = floor;
+    body.velocity.set(0, 0, 0);
+    setBodyCollisions(body, false);
+    if (body.type !== CANNON.Body.KINEMATIC) setAirborneKinematic(body);
+
+    if (body.userData.bullImpactFlash) {
+      body.userData.bullImpactFlashT = (body.userData.bullImpactFlashT ?? 0) + dt;
+      if (body.userData.bullImpactFlashT > 0.15) {
+        body.userData.bullImpactFlash = false;
+        delete body.userData.bullImpactFlashT;
+      }
+    }
+
+    if (spSlot.windupRemaining > 0) {
+      body.userData.bullUpperPhase = 'windup';
+      const windup = spSlot.ability.windup || BULL_UPPERCUT_WINDUP;
+      const t = clamp01(1 - spSlot.windupRemaining / windup);
+      const e = easeInOutCubic(t);
+      body.userData.flightLift = 0;
+      body.userData.bullWindupEndTilt = 0.12 * easeOutCubic(t);
+      body.userData.flightTilt = body.userData.bullWindupEndTilt;
+      body.userData.flightRoll = Math.sin(t * Math.PI) * 0.025;
+      body.userData.flightSquash = 1 - 0.14 * e;
+      continue;
+    }
+
+    if (!spSlot.active && body.userData.bullUpperPhase !== 'dash') continue;
+
+    const phase = body.userData.bullUpperPhase ?? 'dash';
+
+    switch (phase) {
+      case 'dash': {
+        body.userData.bullUpperSlamming = true;
+        const phaseT = body.userData.bullUpperPhaseT ?? 0;
+        const build = easeOutCubic(clamp01(phaseT / BULL_DASH_BUILD_DUR));
+        const fromTilt = body.userData.bullWindupEndTilt ?? 0.12;
+        body.userData.flightTilt = fromTilt + (BULL_DASH_LEAN - fromTilt) * build;
+        body.userData.flightSquash = 1 + 0.05 * build;
+        body.userData.flightRoll = (body.userData.bullCoastNz ?? 0) * 0.045 * build;
+
+        if (body.userData.bullDashDone) {
+          delete body.userData.bullDashDone;
+          body.userData.bullUpperSlamming = false;
+          finishBullUppercut(state, side, spSlot, body, dt);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    // Failsafe: slot ended but attacker still cinematic / locked.
+    if (!spSlot.active && spSlot.windupRemaining <= 0 && body.userData.controlLocked) {
+      resolveBullUppercutOutcome(state, side, body);
+      releaseBullUppercutControl(body);
+    }
+  }
+}
+
 // ---- Libra cinematic visual driver (render rate) ----------------------------
 
 /**
@@ -1361,7 +1893,7 @@ export function shouldStarBlastGlow(body) {
   return phase === 'windup' || phase === 'dash' || phase === 'ascend' || phase === 'dive';
 }
 
-/** Max visual flight height across both tops — used to tilt the camera during Star Blast. */
+/** Max visual flight height across both tops — used for other cinematic camera lift. */
 export function getCinematicFlightLift(state) {
   let lift = 0;
   for (const body of [state.playerBody, state.aiBody]) {
@@ -1372,11 +1904,7 @@ export function getCinematicFlightLift(state) {
 }
 
 let _camSmoothLift = 0;
-let _camFocusX = 0;
-let _camFocusZ = 0;
-let _camFocusLocked = false;
-let _camReleaseT = 0;
-const CAM_RELEASE_DUR = 1.35;
+let _camStadiumT = 0;
 
 function normalCameraFocus(state) {
   if (state.playerBody && state.aiBody) {
@@ -1400,83 +1928,44 @@ function findActiveStarBlast(state) {
     const inMove =
       slot.windupRemaining > 0 || slot.active || body.userData.starPhase != null;
     if (!inMove) continue;
-    const opp = side === 'player' ? state.aiBody : state.playerBody;
-    return { body, opp };
+    return true;
   }
-  return null;
+  return false;
 }
 
-function starBlastCameraTargetLift(body) {
-  const phase = body.userData.starPhase ?? 'windup';
-  const raw = body.userData.flightLift ?? 0;
-  if (phase === 'ascend' || phase === 'dive') return raw;
-  if (phase === 'bounce' || phase === 'settle') return Math.min(raw, 2.5) * 0.12;
-  return 0;
-}
-
-/** Smoothed lift + locked focus while Star Blast plays; eases back afterward. */
+/** Stadium overview while Star Blast plays; eases back to normal tracking afterward. */
 export function getCameraCue(state, dt) {
-  const star = findActiveStarBlast(state);
-  if (star) {
-    _camReleaseT = 0;
-    if (!_camFocusLocked) {
-      const { body, opp } = star;
-      if (opp) {
-        _camFocusX = (body.position.x + opp.position.x) * 0.5;
-        _camFocusZ = (body.position.z + opp.position.z) * 0.5;
-      } else {
-        _camFocusX = body.position.x;
-        _camFocusZ = body.position.z;
-      }
-      _camFocusLocked = true;
-    }
+  const starBlast = findActiveStarBlast(state);
+  const stadiumTarget = starBlast ? 1 : 0;
+  const stadiumRate = starBlast ? 6 : 3.5;
+  _camStadiumT += (stadiumTarget - _camStadiumT) * (1 - Math.exp(-stadiumRate * dt));
 
-    const phase = star.body.userData.starPhase ?? 'windup';
-    const targetLift = starBlastCameraTargetLift(star.body);
-    const smoothRate = phase === 'bounce' || phase === 'settle' ? 16 : 3.5;
-    _camSmoothLift += (targetLift - _camSmoothLift) * (1 - Math.exp(-smoothRate * dt));
+  const targetLift = starBlast ? 0 : getCinematicFlightLift(state);
+  const liftRate = starBlast ? 10 : 8;
+  _camSmoothLift += (targetLift - _camSmoothLift) * (1 - Math.exp(-liftRate * dt));
 
-    return {
-      lift: _camSmoothLift,
-      stabilized: true,
-      focusX: _camFocusX,
-      focusZ: _camFocusZ,
-    };
-  }
+  const normal = normalCameraFocus(state);
+  const t = _camStadiumT;
+  const focusX = normal.x * (1 - t);
+  const focusZ = normal.z * (1 - t);
 
-  if (_camFocusLocked) {
-    _camReleaseT += dt;
-    const t = clamp01(_camReleaseT / CAM_RELEASE_DUR);
-    const ease = easeOutCubic(t);
-    const normal = normalCameraFocus(state);
-    const targetLift = getCinematicFlightLift(state);
-    _camSmoothLift += (targetLift - _camSmoothLift) * (1 - Math.exp(-5 * dt));
+  const baseCamY = 24 + _camSmoothLift * 0.5;
+  const baseCamZ = 20 + _camSmoothLift * 0.1;
+  const baseLookY = _camSmoothLift * 0.38;
 
-    if (t >= 1) {
-      _camFocusLocked = false;
-      _camReleaseT = 0;
-      return { lift: _camSmoothLift, stabilized: false };
-    }
-
-    return {
-      lift: _camSmoothLift,
-      stabilized: true,
-      focusX: _camFocusX + (normal.x - _camFocusX) * ease,
-      focusZ: _camFocusZ + (normal.z - _camFocusZ) * ease,
-    };
-  }
-
-  const targetLift = getCinematicFlightLift(state);
-  _camSmoothLift += (targetLift - _camSmoothLift) * (1 - Math.exp(-8 * dt));
-  return { lift: _camSmoothLift, stabilized: false };
+  return {
+    focusX,
+    focusZ,
+    camY: baseCamY + (STAR_BLAST_CAM_Y - baseCamY) * t,
+    camZ: baseCamZ + (STAR_BLAST_CAM_Z - baseCamZ) * t,
+    lookY: baseLookY + (STAR_BLAST_CAM_LOOK_Y - baseLookY) * t,
+    stabilized: t > 0.04,
+  };
 }
 
 export function resetStarBlastCamera() {
   _camSmoothLift = 0;
-  _camFocusLocked = false;
-  _camReleaseT = 0;
-  _camFocusX = 0;
-  _camFocusZ = 0;
+  _camStadiumT = 0;
 }
 
 /** Per frame: advance cooldown, windup (then activate), and active duration. */
@@ -1501,6 +1990,19 @@ export function tickAbilityTimers(state, dt) {
           if (slot.activeRemaining === 0 && slot.active) {
             const body = side === 'player' ? state.playerBody : state.aiBody;
             if (body) finishStarBlast(state, side, slot, body, dt);
+          }
+        } else if (slot.ability.id === 'bull_red_horn_uppercut') {
+          // Phase machine in tickBullAbilityVisuals ends this move.
+          slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
+          if (slot.activeRemaining === 0 && slot.active) {
+            const body = side === 'player' ? state.playerBody : state.aiBody;
+            const phase = body?.userData.bullUpperPhase;
+            if (body && phase == null) {
+              finishBullUppercut(state, side, slot, body, dt);
+            } else if (body && (phase === 'dash' || body.userData.bullDashDone)) {
+              releaseBullUppercutControl(body);
+              finishBullUppercut(state, side, slot, body, dt);
+            }
           }
         } else {
           slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
@@ -1549,8 +2051,28 @@ function applyStarBlastSlam(impact, slamBody, slamTag, victimTag) {
   return true;
 }
 
+function applyBullUppercutSlam(impact, slamBody, slamTag, victimTag) {
+  if (!slamBody?.userData?.bullUpperSlamming) return false;
+  const victim = impact['body' + victimTag];
+  if (victim?.userData?.bullFlipPhase) {
+    impact['impulse' + slamTag] *= SLAM_SELF_IMPULSE;
+    return true;
+  }
+  impact['impulse' + victimTag] = Math.max(
+    impact['impulse' + victimTag] * BULL_UPPERCUT_SLAM_MULT,
+    2.2
+  );
+  impact['impulse' + slamTag] *= SLAM_SELF_IMPULSE;
+  impact['spinDelta' + victimTag] = Math.min(
+    impact['spinDelta' + victimTag],
+    -bullUppercutSpinLoss(victim)
+  );
+  return true;
+}
+
 function applySlam(impact, slamBody, slamTag, victimTag) {
   if (applyStarBlastSlam(impact, slamBody, slamTag, victimTag)) return;
+  if (applyBullUppercutSlam(impact, slamBody, slamTag, victimTag)) return;
   if (!slamBody.userData.slamming) return;
   impact['impulse' + victimTag] *= SLAM_IMPULSE_MULT;
   impact['impulse' + slamTag] *= SLAM_SELF_IMPULSE;
@@ -1603,6 +2125,11 @@ function applyInvulnerability(impact) {
   }
 }
 
+function applyBullStampede(impact, body, selfTag, oppTag) {
+  if (!body?.userData?.stampeding) return;
+  impact['impulse' + oppTag] *= BULL_STAMPEDE_KB_OUT;
+}
+
 function applyLeoneAnchor(impact, body, selfTag, oppTag) {
   if (!body?.userData?.anchoring) return;
   impact['impulse' + selfTag] = 0;
@@ -1638,6 +2165,8 @@ export function resolveContactAbilities(state, impact) {
   // Run last so slams/guards can't re-apply knockback to an anchored Leone.
   applyLeoneAnchor(impact, impact.bodyA, 'A', 'B');
   applyLeoneAnchor(impact, impact.bodyB, 'B', 'A');
+  applyBullStampede(impact, impact.bodyA, 'A', 'B');
+  applyBullStampede(impact, impact.bodyB, 'B', 'A');
   applyLibraBusterMitigation(state, impact);
 }
 
@@ -1658,6 +2187,7 @@ export function clearAbilityFlags(body) {
   body.userData.sonicBuster = false;
   body.userData.sonicSandBoost = false;
   body.userData.spinStealing = false;
+  body.userData.stampeding = false;
   body.userData.invulnerable = false;
   body.userData.flightLift = 0;
   body.userData.flightTilt = 0;
@@ -1689,6 +2219,14 @@ export function clearAbilityFlags(body) {
   delete body.userData.spinStealBurstT;
   delete body.userData.spinStealFromX;
   delete body.userData.spinStealFromZ;
+  delete body.userData.stampedeT;
+  if (body.userData.bullFlipPhase) {
+    releaseBullFlipVictim(body, false);
+  }
+  delete body.userData.bullUpperSlamming;
+  delete body.userData.bullImpactFlash;
+  delete body.userData.bullImpactFlashT;
+  clearBullUppercutMotion(body);
   delete body.userData.ldragoFlightT;
   delete body.userData.flightRepulseT;
   body.userData.lionWallWindup = false;

@@ -1,9 +1,21 @@
 import { getBeyById } from './beys.js';
 
 /** Opponents in rising difficulty (easiest → hardest). */
-export const CAMPAIGN_OPPONENT_IDS = Object.freeze(['leone', 'pegasus', 'libra', 'ldrago']);
+export const CAMPAIGN_OPPONENT_IDS = Object.freeze([
+  'bull',    // Dark Bull
+  'libra',   // Flame Libra
+  'leone',   // Rock Leone
+  'pegasus', // Storm Pegasus
+  'ldrago',  // Meteo L-Drago
+]);
 
 export const CAMPAIGN_STAGE_COUNT = CAMPAIGN_OPPONENT_IDS.length;
+
+/** Maps a roster id to the campaign AI tier (difficulty scales with stage order). */
+export function getAiTierForOpponentId(opponentId) {
+  const idx = CAMPAIGN_OPPONENT_IDS.indexOf(opponentId);
+  return idx >= 0 ? idx : CAMPAIGN_OPPONENT_IDS.length - 1;
+}
 
 const WINS_NEEDED = 2;
 

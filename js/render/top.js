@@ -66,7 +66,7 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
             if (/libra/i.test(url)) {
               mat.metalness = 0.12;
               mat.roughness = 0.65;
-            } else if (/leone/i.test(url)) {
+            } else if (/leone|bull/i.test(url)) {
               mat.metalness = 0.15;
               mat.roughness = 0.48;
             }
@@ -80,8 +80,10 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
       const modelHolder = new THREE.Group();
       modelHolder.add(model);
       orientSpinAxisToY(modelHolder);
-      // Rock Leone / Flame Libra source meshes have the spin pole inverted vs Pegasus/L-Drago.
-      if (/leone|libra/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
+      // Leone / Libra / Bull: pole faces -Z in the baked mesh; map to +Y spin axis.
+      if (/leone|libra|bull/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
+      // Dark Bull wheel art is 90° off the baked UV frame — align before scaling.
+      if (/bull/i.test(url)) model.rotation.z = Math.PI / 2;
 
       const box = new THREE.Box3().setFromObject(modelHolder);
       const size = box.getSize(new THREE.Vector3());

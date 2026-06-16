@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { isRingOut, isInsideRing } from '../physics/arena.js';
+import { isRingOut, isInsideRing, isPlatformOut } from '../physics/arena.js';
 
 /** True when spin is fully gone, death anim finished, and the still delay elapsed. */
 export function isSleepOutReady(spin, body) {
@@ -14,8 +14,8 @@ export function isSleepOutReady(spin, body) {
  * KO takes priority, then sleep-out (only after full stop + wobble settle), then dual-sleep draw.
  */
 export function evaluateWin(state) {
-  const { playerBody, aiBody, playerSpin, aiSpin, gameFrozen } = state;
-  if (!playerBody || !aiBody || gameFrozen) return null;
+  const { playerBody, aiBody, playerSpin, aiSpin, gameFrozen, pendingKo } = state;
+  if (!playerBody || !aiBody || gameFrozen || pendingKo) return null;
 
   const pRadius = playerBody.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
   const aRadius = aiBody.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
@@ -25,11 +25,11 @@ export function evaluateWin(state) {
   const ax = aiBody.position.x;
   const az = aiBody.position.z;
 
-  if (isRingOut(px, pz, pRadius)) {
-    return { outcome: 'KO', winner: 2, loser: 1 };
+  if (isRingOut(px, pz, pRadius) || isPlatformOut(px, pz, pRadius)) {
+    return { outcome: 'KO', winner: 2, loser: 1, cinematic: true };
   }
-  if (isRingOut(ax, az, aRadius)) {
-    return { outcome: 'KO', winner: 1, loser: 2 };
+  if (isRingOut(ax, az, aRadius) || isPlatformOut(ax, az, aRadius)) {
+    return { outcome: 'KO', winner: 1, loser: 2, cinematic: true };
   }
 
   const pSleep = isSleepOutReady(playerSpin, playerBody);

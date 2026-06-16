@@ -4,11 +4,13 @@ import { applyAISteering, tickAIAbilities, resetAIController } from './input/ai.
 import { createBeySelection } from './ui/selection.js';
 import { queryGameUi } from './ui/domRefs.js';
 import { createCampaignController } from './game/campaignController.js';
+import { GAME_MODES, isVsCpu, modeBlurb } from './game/modes.js';
 
 const startOverlay = document.getElementById('start-overlay');
 const selectOverlay = document.getElementById('select-overlay');
 const modeBar = document.getElementById('pc-mode-bar');
-const modeCpuBtn = document.getElementById('mode-vs-cpu');
+const modeCasualBtn = document.getElementById('mode-casual');
+const modeTourneyBtn = document.getElementById('mode-tournament');
 const mode2pBtn = document.getElementById('mode-2-player');
 const startBlurb = document.getElementById('start-blurb');
 const startKeys = document.getElementById('start-keys');
@@ -17,7 +19,7 @@ const playerHudLabel = document.getElementById('player-hud-label');
 const aiHudLabel = document.getElementById('ai-hud-label');
 const btnStart = document.getElementById('btn-start');
 
-let vsCpu = true;
+let gameMode = GAME_MODES.TOURNAMENT;
 let beysChosen = false;
 let gameRef = null;
 let selection = null;
@@ -27,7 +29,7 @@ const campaignCtrl = createCampaignController({
   gameoverTitle: document.getElementById('gameover-title'),
   gameoverMsg: document.getElementById('gameover-msg'),
   btnRestart: document.getElementById('btn-restart'),
-  isEnabled: () => vsCpu,
+  isEnabled: () => isVsCpu(gameMode),
   onOpponentChange(opp) {
     gameRef.state.aiBey = opp;
     selection.setRivalPick(opp);
@@ -35,15 +37,24 @@ const campaignCtrl = createCampaignController({
 });
 
 function getPlayers() {
-  return vsCpu ? [{ label: 'YOU' }] : [{ label: 'PLAYER 1' }, { label: 'PLAYER 2' }];
+  if (gameMode === GAME_MODES.TWO_PLAYER) {
+    return [{ label: 'PLAYER 1' }, { label: 'PLAYER 2' }];
+  }
+  if (gameMode === GAME_MODES.CASUAL) {
+    return [{ label: 'YOU' }, { label: 'OPPONENT' }];
+  }
+  return [{ label: 'YOU' }];
 }
 
 function applyModeUi() {
-  document.body.classList.toggle('vs-cpu', vsCpu);
-  document.body.classList.toggle('vs-2p', !vsCpu);
+  const vsCpu = isVsCpu(gameMode);
 
-  modeCpuBtn?.classList.toggle('active', vsCpu);
-  mode2pBtn?.classList.toggle('active', !vsCpu);
+  document.body.classList.toggle('vs-cpu', vsCpu);
+  document.body.classList.toggle('vs-2p', gameMode === GAME_MODES.TWO_PLAYER);
+
+  modeCasualBtn?.classList.toggle('active', gameMode === GAME_MODES.CASUAL);
+  modeTourneyBtn?.classList.toggle('active', gameMode === GAME_MODES.TOURNAMENT);
+  mode2pBtn?.classList.toggle('active', gameMode === GAME_MODES.TWO_PLAYER);
 
   if (playerHudLabel) playerHudLabel.textContent = vsCpu ? 'You — Spin' : 'P1 — Spin';
   if (aiHudLabel) aiHudLabel.textContent = vsCpu ? 'CPU — Spin' : 'P2 — Spin';
@@ -54,32 +65,28 @@ function applyModeUi() {
       : 'P1: Arrows · <kbd>.</kbd> power · <kbd>/</kbd> special &nbsp;|&nbsp; P2: WASD · <kbd>Q</kbd> power · <kbd>E</kbd> special';
   }
 
-  if (startBlurb) {
-    startBlurb.textContent = vsCpu
-      ? 'CPU campaign — best of 3 against each rival. Win the series to face the next, tougher bey!'
-      : 'Two-player local battle. P1 uses arrow keys, P2 uses WASD. Launch the other bey out through a KO pocket to win!';
-  }
+  if (startBlurb) startBlurb.textContent = modeBlurb(gameMode);
+  if (startKeys) startKeys.style.display = gameMode === GAME_MODES.TWO_PLAYER ? 'flex' : 'none';
 
-  if (startKeys) startKeys.style.display = vsCpu ? 'none' : 'flex';
   campaignCtrl.updateHud();
 }
 
-function setMode(cpu) {
-  if (vsCpu === cpu) return;
-  vsCpu = cpu;
+function setMode(mode) {
+  if (gameMode === mode) return;
+  gameMode = mode;
   beysChosen = false;
   btnStart.disabled = true;
   campaignCtrl.resetCampaign();
   applyModeUi();
   selection.reset(getPlayers());
-  selection.setRivalLabel(vsCpu ? 'CPU' : null);
+  selection.setRivalLabel(gameMode === GAME_MODES.TOURNAMENT ? 'CPU' : null);
 }
 
 function openBeySelect() {
   campaignCtrl.resetCampaign();
   resetAIController();
   selection.reset(getPlayers());
-  selection.setRivalLabel(vsCpu ? 'CPU' : null);
+  selection.setRivalLabel(gameMode === GAME_MODES.TOURNAMENT ? 'CPU' : null);
   gameRef.returnToMenu();
   selectOverlay.classList.remove('hidden');
   document.getElementById('campaign-hud')?.classList.add('hidden');
@@ -99,7 +106,7 @@ const keyboard = createKeyboardInput(
     }
   },
   (player, slot) => {
-    if (vsCpu && player === 2) return;
+    if (isVsCpu(gameMode) && player === 2) return;
     gameRef?.triggerAbility(player === 1 ? 'player' : 'ai', slot);
   }
 );
@@ -107,7 +114,7 @@ const keyboard = createKeyboardInput(
 gameRef = createGame({
   mode: 'pc',
   canvas: document.getElementById('game-canvas'),
-  isVsCpu: () => vsCpu,
+  isVsCpu: () => isVsCpu(gameMode),
   ui: queryGameUi({
     controlsHintId: 'controls-hint',
     playerAbilitiesId: 'p1-abilities',
@@ -117,7 +124,7 @@ gameRef = createGame({
     clearKeys: keyboard.clearKeys,
     applySteering(state) {
       keyboard.applyPlayer1Steer(state.playerBody, state.playerSpin);
-      if (vsCpu) {
+      if (isVsCpu(gameMode)) {
         applyAISteering(state.aiBody, state.playerBody, state.aiSpin);
         tickAIAbilities(state, (slot) => gameRef.triggerAbility('ai', slot));
       } else {
@@ -147,8 +154,11 @@ selection = createBeySelection({
   players: getPlayers(),
   onComplete(picks) {
     gameRef.state.playerBey = picks[0];
-    if (vsCpu) {
-      campaignCtrl.startCampaign();
+    if (gameMode === GAME_MODES.TOURNAMENT) {
+      campaignCtrl.startTournament();
+    } else if (gameMode === GAME_MODES.CASUAL) {
+      gameRef.state.aiBey = picks[1];
+      campaignCtrl.startCasual(picks[1]);
     } else {
       gameRef.state.aiBey = picks[1];
       campaignCtrl.resetCampaign();
@@ -163,8 +173,9 @@ selection = createBeySelection({
   },
 });
 
-modeCpuBtn?.addEventListener('click', () => setMode(true));
-mode2pBtn?.addEventListener('click', () => setMode(false));
+modeCasualBtn?.addEventListener('click', () => setMode(GAME_MODES.CASUAL));
+modeTourneyBtn?.addEventListener('click', () => setMode(GAME_MODES.TOURNAMENT));
+mode2pBtn?.addEventListener('click', () => setMode(GAME_MODES.TWO_PLAYER));
 
 applyModeUi();
 selection.setRivalLabel('CPU');

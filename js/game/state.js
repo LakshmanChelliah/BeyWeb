@@ -6,6 +6,7 @@ export function createGameState() {
   return {
     gameRunning: false,
     gameFrozen: false,
+    pendingKo: null,
     playerSpin: 1.0,
     aiSpin: 1.0,
     playerVisualYaw: 0,
@@ -33,4 +34,5 @@ export function resetRoundState(state) {
   state.launchGrace = CONFIG.LAUNCH_GRACE;
   state.firstSleeper = null;
   state.lastOutcome = null;
+  state.pendingKo = null;
 }

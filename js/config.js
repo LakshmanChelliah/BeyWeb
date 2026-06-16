@@ -2,6 +2,8 @@
 export const CONFIG = Object.freeze({
   ARENA_RADIUS: 14.0,
   WALL_RADIUS: 13.55,
+  /** Marble platform + white barrier ring (see render/arena.js). */
+  PLATFORM_OUTER_RADIUS: 18.0,
   POCKET_EXIT_RADIUS: 14.05,
   POCKET_HALF_WIDTH: Math.PI / 7.5,
   POCKET_ANGLES: [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3],
@@ -64,4 +66,12 @@ export const CONFIG = Object.freeze({
 
   GRAVITY: 14,
   FLOOR_EPSILON: 0.02,
+
+  /** KO cinematic — launch off the stadium onto the outer platform. */
+  RING_OUT_MIN_SPEED: 9,
+  RING_OUT_SPEED_MULT: 1.4,
+  RING_OUT_LAUNCH_UP: 5.5,
+  /** Y below this after leaving the platform edge ends the KO sequence. */
+  PLATFORM_FALL_Y: -2.5,
+  RING_OUT_MAX_DUR: 4.5,
 });

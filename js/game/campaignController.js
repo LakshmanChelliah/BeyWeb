@@ -1,9 +1,10 @@
 import { resetAIController, setAIDifficulty } from '../input/ai.js';
 import { createCampaign, CAMPAIGN_OPPONENT_IDS, CAMPAIGN_STAGE_COUNT } from './campaign.js';
+import { createCasualMode } from './casualMode.js';
 import { getBeyById } from './beys.js';
 
 /**
- * Wires campaign state to DOM + game callbacks shared by PC and mobile entry points.
+ * Wires tournament + casual progression to DOM and game callbacks (PC and mobile).
  */
 export function createCampaignController({
   campaignHud,
@@ -13,41 +14,81 @@ export function createCampaignController({
   isEnabled = () => true,
   onOpponentChange,
 }) {
-  const campaign = createCampaign();
+  const tournament = createCampaign();
+  const casual = createCasualMode();
+  let activeMode = null;
   let restartAction = 'next-round';
+
+  function isActive() {
+    return isEnabled() && activeMode != null && currentMode().isActive();
+  }
+
+  function currentMode() {
+    return activeMode === 'casual' ? casual : tournament;
+  }
 
   function updateHud() {
     if (!campaignHud) return;
-    if (!isEnabled() || !campaign.isActive()) {
+    if (!isActive()) {
       campaignHud.classList.add('hidden');
       campaignHud.textContent = '';
       return;
     }
 
-    const opp = campaign.getCurrentOpponent();
-    const { player, cpu } = campaign.getSeriesScore();
-    const tier = campaign.getAiTier() + 1;
+    const opp = currentMode().getCurrentOpponent();
+
+    if (activeMode === 'casual') {
+      campaignHud.textContent = `Casual · vs ${opp?.name ?? 'CPU'}`;
+      campaignHud.classList.remove('hidden');
+      return;
+    }
+
+    const { player, cpu } = tournament.getSeriesScore();
+    const tier = tournament.getAiTier() + 1;
     campaignHud.textContent =
-      `Stage ${tier}/${CAMPAIGN_STAGE_COUNT} · Best of 3: ${player}–${cpu} · vs ${opp?.name ?? 'CPU'}`;
+      `Tournament ${tier}/${CAMPAIGN_STAGE_COUNT} · Best of 3: ${player}–${cpu} · vs ${opp?.name ?? 'CPU'}`;
     campaignHud.classList.remove('hidden');
   }
 
   function beginOpponent() {
-    const opp = campaign.getCurrentOpponent();
-    setAIDifficulty(campaign.getAiTier());
+    const opp = currentMode().getCurrentOpponent();
+    setAIDifficulty(currentMode().getAiTier());
     onOpponentChange(opp);
     updateHud();
   }
 
-  function handleMatchEnd(result) {
-    if (!isEnabled() || !campaign.isActive()) return;
+  function handleCasualMatchEnd(result) {
+    const opp = casual.getCurrentOpponent();
+    const oppName = opp?.name ?? 'CPU';
 
+    if (result.outcome === 'DRAW') {
+      restartAction = 'rematch';
+      btnRestart.textContent = 'Rematch';
+      gameoverMsg.textContent = `Draw vs ${oppName} — fight again!`;
+      return;
+    }
+
+    restartAction = 'rematch';
+    btnRestart.textContent = result.winner === 1 ? 'Play Again' : 'Try Again';
+
+    if (result.winner === 1) {
+      gameoverTitle.textContent = 'VICTORY!';
+      gameoverTitle.className = 'win';
+      gameoverMsg.textContent = `You defeated ${oppName}!`;
+    } else {
+      gameoverTitle.textContent = 'DEFEATED';
+      gameoverTitle.className = 'lose';
+      gameoverMsg.textContent = `${oppName} wins — try again!`;
+    }
+  }
+
+  function handleTournamentMatchEnd(result) {
     const isDraw = result.outcome === 'DRAW';
-    if (!isDraw) campaign.recordMatch(result.winner);
+    if (!isDraw) tournament.recordMatch(result.winner);
 
-    const { player, cpu } = campaign.getSeriesScore();
+    const { player, cpu } = tournament.getSeriesScore();
     const scoreLine = `Series: ${player}–${cpu}`;
-    const seriesStatus = campaign.getSeriesStatus();
+    const seriesStatus = tournament.getSeriesStatus();
 
     if (isDraw) {
       restartAction = 'next-round';
@@ -66,7 +107,7 @@ export function createCampaignController({
     }
 
     if (seriesStatus === 'cpu') {
-      restartAction = 'retry-campaign';
+      restartAction = 'retry-tournament';
       btnRestart.textContent = 'Try Again';
       gameoverTitle.textContent = 'DEFEATED';
       gameoverTitle.className = 'lose';
@@ -75,17 +116,17 @@ export function createCampaignController({
       return;
     }
 
-    if (campaign.isCampaignComplete()) {
-      restartAction = 'retry-campaign';
+    if (tournament.isCampaignComplete()) {
+      restartAction = 'retry-tournament';
       btnRestart.textContent = 'Play Again';
       gameoverTitle.textContent = 'CHAMPION!';
       gameoverTitle.className = 'win';
-      gameoverMsg.textContent = `You beat all ${CAMPAIGN_STAGE_COUNT} rivals — campaign complete!`;
+      gameoverMsg.textContent = `You beat all ${CAMPAIGN_STAGE_COUNT} rivals — tournament complete!`;
       campaignHud?.classList.add('hidden');
       return;
     }
 
-    const nextOpp = getBeyById(CAMPAIGN_OPPONENT_IDS[campaign.getOpponentIndex() + 1]);
+    const nextOpp = getBeyById(CAMPAIGN_OPPONENT_IDS[tournament.getOpponentIndex() + 1]);
     restartAction = 'next-opponent';
     btnRestart.textContent = 'Next Rival';
     gameoverTitle.textContent = 'SERIES WON!';
@@ -93,9 +134,26 @@ export function createCampaignController({
     gameoverMsg.textContent = `${scoreLine} — next up: ${nextOpp?.name ?? 'CPU'} (harder CPU).`;
   }
 
+  function handleMatchEnd(result) {
+    if (!isActive()) return;
+
+    if (activeMode === 'casual') {
+      handleCasualMatchEnd(result);
+      return;
+    }
+
+    handleTournamentMatchEnd(result);
+  }
+
   function handleRestart(resetGame) {
-    if (restartAction === 'retry-campaign') {
-      campaign.start();
+    if (activeMode === 'casual') {
+      resetAIController();
+      resetGame();
+      return;
+    }
+
+    if (restartAction === 'retry-tournament') {
+      tournament.start();
       beginOpponent();
       resetAIController();
       resetGame();
@@ -103,7 +161,7 @@ export function createCampaignController({
     }
 
     if (restartAction === 'next-opponent') {
-      campaign.advanceOpponent();
+      tournament.advanceOpponent();
       beginOpponent();
       resetAIController();
       resetGame();
@@ -115,21 +173,34 @@ export function createCampaignController({
   }
 
   return {
-    campaign,
+    tournament,
+    casual,
     updateHud,
     beginOpponent,
     handleMatchEnd,
     handleRestart,
-    startCampaign() {
-      campaign.start();
+    startTournament() {
+      activeMode = 'tournament';
+      tournament.start();
+      beginOpponent();
+    },
+    startCasual(opponentBey) {
+      activeMode = 'casual';
+      casual.start(opponentBey);
       beginOpponent();
     },
     resetCampaign() {
-      campaign.reset();
+      activeMode = null;
+      tournament.reset();
+      casual.reset();
       updateHud();
     },
     handlesRestart() {
-      return isEnabled() && campaign.isActive();
+      return isActive();
+    },
+    /** @deprecated Use startTournament */
+    startCampaign() {
+      this.startTournament();
     },
   };
 }

@@ -17,6 +17,12 @@ import {
   applyCenterPull,
   resolveWallClipping,
 } from '../physics/top.js';
+import {
+  beginRingOut,
+  stepRingOutBodies,
+  isRingOutCinematicDone,
+  clearRingOut,
+} from '../physics/ringOut.js';
 import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera } from '../render/scene.js';
@@ -32,6 +38,7 @@ import {
   tickLeoneAbilityVisuals,
   tickLdragoAbilityVisuals,
   tickLibraAbilityVisuals,
+  tickBullAbilityVisuals,
   getCameraCue,
   resetStarBlastCamera,
   shouldStarBlastGlow,
@@ -43,6 +50,7 @@ import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
 import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
 import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
 import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
+import { createBullAbilityVfx } from '../render/bullAbilityVfx.js';
 
 /**
  * Boots the shared game engine for PC (2-player) or mobile (gyro + AI).
@@ -74,6 +82,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   const libraVfx = {
     player: createLibraAbilityVfx(scene),
     ai: createLibraAbilityVfx(scene),
+  };
+  const bullVfx = {
+    player: createBullAbilityVfx(scene),
+    ai: createBullAbilityVfx(scene),
   };
   const contacts = setupContactHandlers(world, () => state);
 
@@ -230,6 +242,17 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         const base = channeling ? pulse * 1.45 : pulse * 0.65;
         return { color: sp.ability.glow, intensity: base };
       }
+      if (sp.ability.id === 'bull_red_horn_uppercut') {
+        const body = side === 'player' ? state.playerBody : state.aiBody;
+        if (body?.userData.bullImpactFlash) {
+          return { color: '#ef4444', intensity: 2.5 };
+        }
+        const phase = body?.userData.bullUpperPhase;
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.012);
+        const intense =
+          sp.windupRemaining > 0 || phase === 'windup' || phase === 'dash';
+        return { color: sp.ability.glow, intensity: intense ? pulse * 1.55 : pulse * 0.9 };
+      }
       return { color: sp.ability.glow, intensity: 1.0 };
     }
     const pw = runtime.power;
@@ -258,6 +281,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         const intensity = burst > 0 ? Math.max(base, 1.35 + burst * 0.65) : base;
         return { color: pw.ability.glow, intensity };
       }
+      if (pw.ability.id === 'bull_maximum_stampede') {
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.013);
+        return { color: pw.ability.glow, intensity: pulse * 1.2 };
+      }
       return { color: pw.ability.glow, intensity: 0.55 };
     }
     return null;
@@ -282,7 +309,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function triggerAbility(side, slot) {
-    if (!state.gameRunning || state.gameFrozen || state.launchGrace > 0) return;
+    if (!state.gameRunning || state.gameFrozen || state.launchGrace > 0 || state.pendingKo) return;
     const ability = triggerAbilityCore(state, side, slot);
     if (ability && slot === 'special') {
       const bey = side === 'player' ? state.playerBey : state.aiBey;
@@ -323,7 +350,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     state.gameFrozen = true;
     state.gameRunning = false;
     state.lastOutcome = result;
+    state.pendingKo = null;
     freezeBodies();
+    clearRingOut(state.playerBody);
+    clearRingOut(state.aiBody);
     input.clearKeys?.();
     clearAbilityFlags(state.playerBody);
     clearAbilityFlags(state.aiBody);
@@ -335,6 +365,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     speedBoostVfx.ai.reset();
     ldragoVfx.player.reset();
     ldragoVfx.ai.reset();
+    bullVfx.player.reset();
+    bullVfx.ai.reset();
     dom.specialFlash?.classList.remove('flash-play');
 
     const endMode = mode === 'pc' && isVsCpu?.() ? 'pc-cpu' : mode;
@@ -354,6 +386,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     speedBoostVfx.ai.reset();
     ldragoVfx.player.reset();
     ldragoVfx.ai.reset();
+    bullVfx.player.reset();
+    bullVfx.ai.reset();
     if (state.playerBody) {
       contacts.detach(state.playerBody);
       world.removeBody(state.playerBody);
@@ -389,8 +423,18 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     // Stamp bey stats onto each body so physics handlers can read them.
     const playerBey = state.playerBey;
     const aiBey = state.aiBey;
-    state.playerBody.userData.beyStats = { atk: playerBey.atk ?? 50, def: playerBey.def ?? 50, sta: playerBey.sta ?? 50 };
-    state.aiBody.userData.beyStats    = { atk: aiBey.atk    ?? 50, def: aiBey.def    ?? 50, sta: aiBey.sta    ?? 50 };
+    state.playerBody.userData.beyStats = {
+      atk: playerBey.atk ?? 50,
+      move: playerBey.move ?? playerBey.atk ?? 50,
+      def: playerBey.def ?? 50,
+      sta: playerBey.sta ?? 50,
+    };
+    state.aiBody.userData.beyStats = {
+      atk: aiBey.atk ?? 50,
+      move: aiBey.move ?? aiBey.atk ?? 50,
+      def: aiBey.def ?? 50,
+      sta: aiBey.sta ?? 50,
+    };
 
     // Tag sides and build the per-bey ability runtimes + on-screen buttons.
     state.playerBody.userData.side = 'player';
@@ -450,21 +494,28 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function stepPhysics() {
+    stepRingOutBodies(state);
+
     if (state.playerBody) {
-      settleSleepingTop(state.playerBody, state.playerSpin);
+      if (!state.playerBody.userData.ringOut) {
+        settleSleepingTop(state.playerBody, state.playerSpin);
+      }
       stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
       pinTopToFloor(state.playerBody);
     }
     if (state.aiBody) {
-      settleSleepingTop(state.aiBody, state.aiSpin);
+      if (!state.aiBody.userData.ringOut) {
+        settleSleepingTop(state.aiBody, state.aiSpin);
+      }
       stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
       pinTopToFloor(state.aiBody);
     }
 
-    input.applySteering?.(state);
-
-    applyCenterPull(state.playerBody, state.playerSpin);
-    applyCenterPull(state.aiBody, state.aiSpin);
+    if (!state.pendingKo) {
+      input.applySteering?.(state);
+      applyCenterPull(state.playerBody, state.playerSpin);
+      applyCenterPull(state.aiBody, state.aiSpin);
+    }
 
     world.step(CONFIG.FIXED_DT);
     contacts.resolve(state, CONFIG.FIXED_DT);
@@ -480,13 +531,17 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       clampLaunchSpeed(state.playerBody, state.launchGrace);
       stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
       pinTopToFloor(state.playerBody);
-      settleSleepingTop(state.playerBody, state.playerSpin);
+      if (!state.playerBody.userData.ringOut) {
+        settleSleepingTop(state.playerBody, state.playerSpin);
+      }
     }
     if (state.aiBody) {
       clampLaunchSpeed(state.aiBody, state.launchGrace);
       stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
       pinTopToFloor(state.aiBody);
-      settleSleepingTop(state.aiBody, state.aiSpin);
+      if (!state.aiBody.userData.ringOut) {
+        settleSleepingTop(state.aiBody, state.aiSpin);
+      }
     }
   }
 
@@ -538,12 +593,31 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       tickLeoneAbilityVisuals(state, dt);
       tickLdragoAbilityVisuals(state, dt);
       tickLibraAbilityVisuals(state, dt);
+      tickBullAbilityVisuals(state, dt);
       trackSleepers(state);
       updateHud();
       updateAbilityHud();
 
       const result = evaluateWin(state);
-      if (result) endGame(result);
+      if (result?.cinematic) {
+        if (!state.pendingKo) {
+          state.pendingKo = { ...result, elapsed: 0 };
+          const loserBody = result.loser === 1 ? state.playerBody : state.aiBody;
+          clearAbilityFlags(loserBody);
+          beginRingOut(loserBody);
+        }
+      } else if (result) {
+        endGame(result);
+      }
+
+      if (state.pendingKo) {
+        state.pendingKo.elapsed += dt;
+        const loserBody =
+          state.pendingKo.loser === 1 ? state.playerBody : state.aiBody;
+        if (isRingOutCinematicDone(loserBody, state.pendingKo.elapsed)) {
+          endGame(state.pendingKo);
+        }
+      }
     }
 
     updateAbilityVisuals();
@@ -582,6 +656,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     ldragoVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     libraVfx.player.update(playerGroup, state.playerBody, camera, dt);
     libraVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    bullVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    bullVfx.ai.update(aiGroup, state.aiBody, camera, dt);
 
     updateCamera(camera, state, mode, getCameraCue(state, dt));
     renderer.render(scene, camera);
