@@ -13,7 +13,8 @@ import {
   pinTopToFloor,
   settleSleepingTop,
   updateTopCollisions,
-  settleSpawnedTops,
+  beginLaunchDrop,
+  stepLaunchDrop,
   applyCenterPull,
   resolveWallClipping,
 } from '../physics/top.js';
@@ -25,7 +26,7 @@ import {
 } from '../physics/ringOut.js';
 import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
-import { createScene, updateCamera } from '../render/scene.js';
+import { createScene, updateCamera, resetMobileCameraFraming } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
 import { createTopGroups, loadTopModel, setTopEmissive } from '../render/top.js';
 import { beyColorHex } from './beys.js';
@@ -43,7 +44,9 @@ import {
   resetStarBlastCamera,
   shouldStarBlastGlow,
   clearAbilityFlags,
+  cancelAbilitiesOnSpinStop,
   isLibraBusterChannelingBody,
+  SPECIAL_LOGO_FLASH_DUR,
 } from './abilities.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
@@ -51,6 +54,7 @@ import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
 import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
 import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
 import { createBullAbilityVfx } from '../render/bullAbilityVfx.js';
+import { createCollisionSparksVfx } from '../render/collisionSparksVfx.js';
 
 /**
  * Boots the shared game engine for PC (2-player) or mobile (gyro + AI).
@@ -87,7 +91,29 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     player: createBullAbilityVfx(scene),
     ai: createBullAbilityVfx(scene),
   };
-  const contacts = setupContactHandlers(world, () => state);
+  const collisionSparksVfx = createCollisionSparksVfx(scene);
+
+  function resetAllAbilityVfx() {
+    starBlastVfx.player.reset();
+    starBlastVfx.ai.reset();
+    leoneVfx.player.reset();
+    leoneVfx.ai.reset();
+    speedBoostVfx.player.reset();
+    speedBoostVfx.ai.reset();
+    ldragoVfx.player.reset();
+    ldragoVfx.ai.reset();
+    libraVfx.player.reset();
+    libraVfx.ai.reset();
+    bullVfx.player.reset();
+    bullVfx.ai.reset();
+    collisionSparksVfx.reset();
+  }
+
+  const contacts = setupContactHandlers(
+    world,
+    () => state,
+    (event) => collisionSparksVfx.spawn(event)
+  );
 
   // Debug collider rings (toggle with KeyC): a flat unit ring scaled to each
   // bey's outerRadius, drawn at the model's mid-height so the collider edge can
@@ -151,8 +177,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
 
   function abilityKeyLabels() {
     if (mode !== 'pc') return { player: {}, ai: {} };
-    if (isVsCpu?.()) return { player: { power: '.', special: '/' }, ai: {} };
-    return { player: { power: '.', special: '/' }, ai: { power: 'Q', special: 'E' } };
+    if (isVsCpu?.()) return { player: { power: 'Q', special: 'E' }, ai: {} };
+    return { player: { power: 'Q', special: 'E' }, ai: { power: '.', special: '/' } };
   }
   const abilityButtons = { player: [], ai: [] };
 
@@ -303,9 +329,23 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     if (!overlay || !img || !bey?.logo) return;
     img.src = bey.logo;
     overlay.style.setProperty('--flash-glow', glowColor || '#4f8cff');
+    overlay.style.setProperty('--flash-dur', `${SPECIAL_LOGO_FLASH_DUR}s`);
     overlay.classList.remove('flash-play');
     void overlay.offsetWidth; // force reflow to restart the animation
     overlay.classList.add('flash-play');
+  }
+
+  function stopSpecialFlash() {
+    dom.specialFlash?.classList.remove('flash-play');
+  }
+
+  function syncSpecialFlashOverlay() {
+    if (!dom.specialFlash?.classList.contains('flash-play')) return;
+    for (const side of ['player', 'ai']) {
+      const sp = state.abilities?.[side]?.special;
+      if (sp && (sp.windupRemaining > 0 || sp.active)) return;
+    }
+    stopSpecialFlash();
   }
 
   function triggerAbility(side, slot) {
@@ -359,14 +399,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     clearAbilityFlags(state.aiBody);
     setTopEmissive(playerGroup, 0x000000, 0);
     setTopEmissive(aiGroup, 0x000000, 0);
-    leoneVfx.player.reset();
-    leoneVfx.ai.reset();
-    speedBoostVfx.player.reset();
-    speedBoostVfx.ai.reset();
-    ldragoVfx.player.reset();
-    ldragoVfx.ai.reset();
-    bullVfx.player.reset();
-    bullVfx.ai.reset();
+    resetAllAbilityVfx();
     dom.specialFlash?.classList.remove('flash-play');
 
     const endMode = mode === 'pc' && isVsCpu?.() ? 'pc-cpu' : mode;
@@ -380,20 +413,12 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
 
   function spawnTops() {
     resetStarBlastCamera();
-    leoneVfx.player.reset();
-    leoneVfx.ai.reset();
-    speedBoostVfx.player.reset();
-    speedBoostVfx.ai.reset();
-    ldragoVfx.player.reset();
-    ldragoVfx.ai.reset();
-    bullVfx.player.reset();
-    bullVfx.ai.reset();
+    resetMobileCameraFraming();
+    resetAllAbilityVfx();
     if (state.playerBody) {
-      contacts.detach(state.playerBody);
       world.removeBody(state.playerBody);
     }
     if (state.aiBody) {
-      contacts.detach(state.aiBody);
       world.removeBody(state.aiBody);
     }
 
@@ -417,24 +442,25 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       2
     );
 
-    contacts.attach(state.playerBody);
-    contacts.attach(state.aiBody);
-
     // Stamp bey stats onto each body so physics handlers can read them.
     const playerBey = state.playerBey;
     const aiBey = state.aiBey;
     state.playerBody.userData.beyStats = {
+      id: playerBey.id,
       atk: playerBey.atk ?? 50,
       move: playerBey.move ?? playerBey.atk ?? 50,
       def: playerBey.def ?? 50,
       sta: playerBey.sta ?? 50,
     };
+    state.playerBody.userData.beyColor = beyColorHex(playerBey.color);
     state.aiBody.userData.beyStats = {
+      id: aiBey.id,
       atk: aiBey.atk ?? 50,
       move: aiBey.move ?? aiBey.atk ?? 50,
       def: aiBey.def ?? 50,
       sta: aiBey.sta ?? 50,
     };
+    state.aiBody.userData.beyColor = beyColorHex(aiBey.color);
 
     // Tag sides and build the per-bey ability runtimes + on-screen buttons.
     state.playerBody.userData.side = 'player';
@@ -452,7 +478,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
 
     stabilizeTop(state.playerBody, 0.15, 1, state.launchGrace);
     stabilizeTop(state.aiBody, 0.15, -0.95, state.launchGrace);
-    settleSpawnedTops(world, state);
+    beginLaunchDrop(state.playerBody);
+    beginLaunchDrop(state.aiBody);
     updateTopCollisions(state);
     updateHud();
     updateAvatars();
@@ -464,6 +491,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   function returnToMenu() {
     state.gameRunning = false;
     state.gameFrozen = false;
+    resetAllAbilityVfx();
     dom.gameoverOverlay.classList.remove('visible');
     dom.hud.classList.remove('visible');
     dom.controlsHint?.classList.remove('visible');
@@ -518,10 +546,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     }
 
     world.step(CONFIG.FIXED_DT);
+
+    stepLaunchDrop(state.playerBody, state.launchGrace);
+    stepLaunchDrop(state.aiBody, state.launchGrace);
+
     contacts.resolve(state, CONFIG.FIXED_DT);
     contacts.resolveWallContacts(state, CONFIG.FIXED_DT);
     contacts.resolveWallClipSpin(state, state.playerBody, state.aiBody);
-    resolveWallClipping(state.playerBody, state.aiBody);
+    resolveWallClipping(state.playerBody, state.aiBody, contacts.emitWallImpact);
 
     // Run after physics so cinematic moves (Star Blast climb/dive) aren't
     // overwritten by gravity or floor pinning in the same step.
@@ -588,7 +620,9 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
             state.aiBey.sta ?? 50,
             aiSandMult
           );
+      cancelAbilitiesOnSpinStop(state, dt);
       tickAbilityTimers(state, dt);
+      syncSpecialFlashOverlay();
       tickAbilityVisuals(state, dt);
       tickLeoneAbilityVisuals(state, dt);
       tickLdragoAbilityVisuals(state, dt);
@@ -658,15 +692,18 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     libraVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     bullVfx.player.update(playerGroup, state.playerBody, camera, dt);
     bullVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    collisionSparksVfx.update(camera, dt);
 
-    updateCamera(camera, state, mode, getCameraCue(state, dt));
+    if (!state.gameFrozen) {
+      updateCamera(camera, state, mode, getCameraCue(state, dt, mode));
+    }
     renderer.render(scene, camera);
   }
 
   dom.btnStart.addEventListener('click', () => input.onStartClick?.(startGame) ?? startGame());
   dom.btnRestart.addEventListener('click', () => input.onRestart?.(resetGame) ?? resetGame());
   dom.btnChangeBey?.addEventListener('click', () => input.onChangeBey?.());
-  dom.btnRecalibrate?.addEventListener('click', () => input.onRecalibrate?.(resetGame));
+  dom.btnRecalibrate?.addEventListener('click', () => input.onRecalibrate?.());
 
   gameLoop();
 

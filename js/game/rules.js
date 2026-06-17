@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { isRingOut, isInsideRing, isPlatformOut } from '../physics/arena.js';
+import { isRingOut, isPlatformOut } from '../physics/arena.js';
 
 /** True when spin is fully gone, death anim finished, and the still delay elapsed. */
 export function isSleepOutReady(spin, body) {
@@ -14,8 +14,8 @@ export function isSleepOutReady(spin, body) {
  * KO takes priority, then sleep-out (only after full stop + wobble settle), then dual-sleep draw.
  */
 export function evaluateWin(state) {
-  const { playerBody, aiBody, playerSpin, aiSpin, gameFrozen, pendingKo } = state;
-  if (!playerBody || !aiBody || gameFrozen || pendingKo) return null;
+  const { playerBody, aiBody, playerSpin, aiSpin, gameFrozen, pendingKo, launchGrace } = state;
+  if (!playerBody || !aiBody || gameFrozen || pendingKo || launchGrace > 0) return null;
 
   const pRadius = playerBody.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
   const aRadius = aiBody.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
@@ -34,17 +34,17 @@ export function evaluateWin(state) {
 
   const pSleep = isSleepOutReady(playerSpin, playerBody);
   const aSleep = isSleepOutReady(aiSpin, aiBody);
-  const pIn = isInsideRing(px, pz, pRadius);
-  const aIn = isInsideRing(ax, az, aRadius);
+  const pOnPlatform = !isPlatformOut(px, pz, pRadius);
+  const aOnPlatform = !isPlatformOut(ax, az, aRadius);
 
-  if (pSleep && aSleep && pIn && aIn) {
+  if (pSleep && aSleep && pOnPlatform && aOnPlatform) {
     return { outcome: 'DRAW', winner: null, loser: null };
   }
 
-  if (pSleep && !aSleep && pIn) {
+  if (pSleep && !aSleep && pOnPlatform) {
     return { outcome: 'SO', winner: 2, loser: 1 };
   }
-  if (aSleep && !pSleep && aIn) {
+  if (aSleep && !pSleep && aOnPlatform) {
     return { outcome: 'SO', winner: 1, loser: 2 };
   }
 
@@ -67,7 +67,7 @@ export function formatEndGame(result, mode) {
     return {
       title: 'DRAW!',
       titleClass: 'draw',
-      message: 'Both beys stopped spinning — rematch!',
+      message: 'Both beys stopped spinning. Rematch!',
     };
   }
 
@@ -78,7 +78,7 @@ export function formatEndGame(result, mode) {
         title: playerWon ? 'VICTORY!' : 'KNOCKOUT!',
         titleClass: playerWon ? 'win' : 'lose',
         message: playerWon
-          ? 'Knock Out — you launched the rival from the stadium!'
+          ? 'Knock Out! You launched the rival from the stadium!'
           : 'You were knocked out of the stadium!',
       };
     }
@@ -86,7 +86,7 @@ export function formatEndGame(result, mode) {
       title: playerWon ? 'VICTORY!' : 'SLEEP OUT!',
       titleClass: playerWon ? 'win' : 'lose',
       message: playerWon
-        ? 'Sleep Out — your bey was still spinning!'
+        ? 'Sleep Out! Your bey was still spinning!'
         : 'Your bey stopped spinning first.',
     };
   }
@@ -95,13 +95,13 @@ export function formatEndGame(result, mode) {
     return {
       title: `PLAYER ${winner} WINS!`,
       titleClass: 'win',
-      message: `Player ${winner} — Knock Out!`,
+      message: `Player ${winner}: Knock Out!`,
     };
   }
 
   return {
     title: `PLAYER ${winner} WINS!`,
     titleClass: 'win',
-    message: `Player ${winner} — Sleep Out!`,
+    message: `Player ${winner}: Sleep Out!`,
   };
 }

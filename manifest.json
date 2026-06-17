@@ -1,0 +1,9 @@
+{
+  "name": "Spin Sumo",
+  "short_name": "Spin Sumo",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "./index.html",
+  "background_color": "#141b30",
+  "theme_color": "#141b30"
+}

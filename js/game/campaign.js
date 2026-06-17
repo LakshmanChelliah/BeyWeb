@@ -17,6 +17,18 @@ export function getAiTierForOpponentId(opponentId) {
   return idx >= 0 ? idx : CAMPAIGN_OPPONENT_IDS.length - 1;
 }
 
+/** Opponent for a tournament stage (fixed order, skips the player's bey). */
+export function pickTournamentOpponent(stageIndex, excludeBey) {
+  const excludeId = typeof excludeBey === 'string' ? excludeBey : excludeBey?.id;
+  const start = Math.max(0, Math.min(stageIndex, CAMPAIGN_OPPONENT_IDS.length - 1));
+  for (let step = 0; step < CAMPAIGN_OPPONENT_IDS.length; step++) {
+    const id = CAMPAIGN_OPPONENT_IDS[(start + step) % CAMPAIGN_OPPONENT_IDS.length];
+    const bey = getBeyById(id);
+    if (bey && bey.id !== excludeId) return bey;
+  }
+  return getBeyById(CAMPAIGN_OPPONENT_IDS[start]);
+}
+
 /** Random rival from the tournament roster (excludes the player's bey). */
 export function pickRandomRival(excludeBey) {
   const excludeId = typeof excludeBey === 'string' ? excludeBey : excludeBey?.id;
@@ -108,11 +120,6 @@ export function createCampaign() {
         opponentIndex >= CAMPAIGN_OPPONENT_IDS.length - 1 &&
         playerWins >= WINS_NEEDED
       );
-    },
-
-    getRoundLabel() {
-      const total = playerWins + cpuWins + 1;
-      return `Match ${Math.min(total, 3)}`;
     },
   };
 }

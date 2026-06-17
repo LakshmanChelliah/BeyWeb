@@ -1,18 +1,22 @@
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
 
+/** Returns true when angle is within a KO pocket gap (toleranceMult widens for wall-clip/spin-loss). */
+export function isAtPocketAngle(angle, toleranceMult = 1) {
+  for (const pocket of CONFIG.POCKET_ANGLES) {
+    let delta = Math.abs(angle - pocket);
+    if (delta > Math.PI) delta = 2 * Math.PI - delta;
+    if (delta <= CONFIG.POCKET_HALF_WIDTH * toleranceMult) return true;
+  }
+  return false;
+}
+
 /** Returns true when a bey's center has exited through a KO pocket (majority of bey outside) */
 export function isRingOut(x, z, outerRadius) {
   const r = Math.hypot(x, z);
   if (r < CONFIG.POCKET_EXIT_RADIUS) return false;
 
-  const angle = Math.atan2(z, x);
-  for (const pocket of CONFIG.POCKET_ANGLES) {
-    let delta = Math.abs(angle - pocket);
-    if (delta > Math.PI) delta = 2 * Math.PI - delta;
-    if (delta <= CONFIG.POCKET_HALF_WIDTH) return true;
-  }
-  return false;
+  return isAtPocketAngle(Math.atan2(z, x), 1);
 }
 
 /** Returns true when a bey has left the white outer platform. */

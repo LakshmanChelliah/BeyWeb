@@ -1,7 +1,10 @@
 import { CONFIG } from '../config.js';
 import { setBodyCollisions } from './top.js';
 
-/** Starts the ring-out flight: outward pop + arc onto the marble platform. */
+/**
+ * Starts the ring-out slide: preserve exit momentum, nudge outward if slow.
+ * No upward pop — the bey should carry its line off the stadium.
+ */
 export function beginRingOut(body) {
   if (!body || body.userData.ringOut) return;
 
@@ -14,14 +17,27 @@ export function beginRingOut(body) {
   const dist = Math.hypot(x, z) || 1;
   const nx = x / dist;
   const nz = z / dist;
-  const radialOut = body.velocity.x * nx + body.velocity.z * nz;
-  const speed = Math.max(CONFIG.RING_OUT_MIN_SPEED, radialOut * CONFIG.RING_OUT_SPEED_MULT);
-  body.velocity.x = nx * speed;
-  body.velocity.z = nz * speed;
-  body.velocity.y = CONFIG.RING_OUT_LAUNCH_UP;
+
+  let vx = body.velocity.x;
+  let vz = body.velocity.z;
+  const radialOut = vx * nx + vz * nz;
+
+  if (radialOut < CONFIG.RING_OUT_MIN_SPEED) {
+    const boost = CONFIG.RING_OUT_MIN_SPEED - radialOut;
+    vx += nx * boost;
+    vz += nz * boost;
+  } else {
+    const scale = CONFIG.RING_OUT_SPEED_MULT;
+    vx += nx * radialOut * (scale - 1);
+    vz += nz * radialOut * (scale - 1);
+  }
+
+  body.velocity.x = vx;
+  body.velocity.z = vz;
+  if (body.velocity.y < 0) body.velocity.y = 0;
 }
 
-/** Keeps ring-out beys on the platform floor until they cross the outer edge. */
+/** Platform slide + soft floor while ring-out is active. */
 export function stepRingOutBodies(state) {
   for (const body of [state.playerBody, state.aiBody]) {
     if (!body?.userData.ringOut) continue;
@@ -31,6 +47,12 @@ export function stepRingOutBodies(state) {
     const dist = Math.hypot(body.position.x, body.position.z);
     const onPlatform = dist + r <= CONFIG.PLATFORM_OUTER_RADIUS;
     body.collisionFilterMask = onPlatform ? CONFIG.COLLISION_BOWL : 0;
+
+    const floorY = CONFIG.FLOOR_Y + r + CONFIG.FLOOR_EPSILON;
+    if (onPlatform && body.position.y < floorY && body.velocity.y <= 0) {
+      body.position.y = floorY;
+      body.velocity.y = 0;
+    }
   }
 }
 

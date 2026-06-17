@@ -1,5 +1,6 @@
 import { BEYS, isBeyPlayable } from '../game/beys.js';
 import { ABILITY_REGISTRY } from '../game/abilities.js';
+import { renderBeyPackagingStars } from './beyPackagingStars.js';
 
 /**
  * Builds the 3D carousel bey-selection screen.
@@ -22,10 +23,24 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
   let currentIndex = 0;
 
   let mount = root.querySelector('.select-mount');
+  let picksEl = root.querySelector('.select-picks');
+
   if (!mount) {
     mount = document.createElement('div');
     mount.className = 'select-mount';
     root.appendChild(mount);
+  }
+
+  if (!picksEl) {
+    picksEl = document.createElement('div');
+    picksEl.className = 'select-picks';
+    root.appendChild(picksEl);
+  }
+
+  // Legacy: picks used to live inside .select-mount — always hoist to overlay root.
+  mount.querySelectorAll('.select-picks').forEach((el) => el.remove());
+  if (picksEl.parentElement !== root) {
+    root.appendChild(picksEl);
   }
 
   mount.innerHTML = `
@@ -39,7 +54,6 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       <div class="carousel-container"></div>
     </div>
     <div class="carousel-indicators"></div>
-    <div class="select-picks"></div>
   `;
 
   const titleEl = mount.querySelector('.select-title');
@@ -47,13 +61,11 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
   const indicators = mount.querySelector('.carousel-indicators');
   const prevBtn = mount.querySelector('.carousel-arrow.left');
   const nextBtn = mount.querySelector('.carousel-arrow.right');
-  const picksEl = mount.querySelector('.select-picks');
 
-  const statRow = (label, value) => `
-    <div class="bey-stat">
-      <div class="bey-stat-head"><span>${label}</span><span class="bey-stat-val">${value ?? '?'}</span></div>
-      <div class="bey-stat-track"><div class="bey-stat-fill" style="width:${value ?? 0}%"></div></div>
-    </div>`;
+  const statsBlock = (bey) =>
+    isBeyPlayable(bey)
+      ? renderBeyPackagingStars(bey)
+      : renderBeyPackagingStars(bey, { mystery: true });
 
   const movesBlock = (bey) => {
     const g = bey.gimmicks;
@@ -87,11 +99,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
         <div class="bey-type">${bey.type}</div>
         <h2 class="bey-name">${bey.name}</h2>
         <p class="bey-desc">${bey.desc}</p>
-        <div class="bey-stats">
-          ${statRow('ATK', bey.atk)}
-          ${statRow('DEF', bey.def)}
-          ${statRow('STAMINA', bey.sta)}
-        </div>
+        ${statsBlock(bey)}
         ${movesBlock(bey)}
         <button class="bey-select-btn" type="button">SELECT</button>
         <div class="bey-taken">TAKEN</div>
@@ -116,6 +124,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
   });
 
   const dots = Array.from(indicators.children);
+  const isMobile = document.body.classList.contains('mobile');
 
   function nextOpenIndex(from) {
     for (let step = 0; step < ROSTER.length; step++) {
@@ -135,7 +144,6 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
 
     if (turn >= players.length) {
       render();
-      root.classList.add('select-done');
       onComplete(picks);
       return;
     }
@@ -146,26 +154,29 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
 
   function render() {
     const total = ROSTER.length;
-    const radius = Math.max(360, total * 95);
+    const radius = isMobile ? Math.max(198, total * 46) : Math.max(360, total * 95);
 
     cards.forEach((item, i) => {
       const bey = ROSTER[i];
+      const isCenter = i === currentIndex;
+      const card = item.querySelector('.bey-card');
+      const btn = item.querySelector('.bey-select-btn');
+      const taken = locked.has(bey.id);
+
+      item.hidden = false;
       const angle = (i - currentIndex) * (360 / total);
       const rad = angle * (Math.PI / 180);
       const x = Math.sin(rad) * radius;
       const z = Math.cos(rad) * radius - radius;
-      const opacity = Math.max(0.18, (z + radius) / radius);
-      const isCenter = i === currentIndex;
-      const scale = isCenter ? 1.08 : 0.78;
+      const scale = isMobile ? (isCenter ? 1 : 0.74) : isCenter ? 1.08 : 0.78;
+      const opacity = Math.max(isMobile ? 0.2 : 0.18, (z + radius) / radius);
 
       item.style.transform = `translateX(${x}px) translateZ(${z}px) scale(${scale})`;
       item.style.opacity = String(opacity);
-      item.style.filter = isCenter ? 'none' : 'blur(3px) brightness(0.55)';
+      item.style.filter = isCenter ? 'none' : isMobile ? 'blur(2px) brightness(0.58)' : 'blur(3px) brightness(0.55)';
       item.style.zIndex = String(Math.round(z + radius));
+      item.style.pointerEvents = isCenter ? 'auto' : 'none';
 
-      const card = item.querySelector('.bey-card');
-      const btn = item.querySelector('.bey-select-btn');
-      const taken = locked.has(bey.id);
       card.classList.toggle('active', isCenter);
       card.classList.toggle('taken', taken);
       btn.disabled = taken || !isCenter;
@@ -175,39 +186,57 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
     dots.forEach((d, i) => d.classList.toggle('on', i === currentIndex));
 
     if (turn < players.length) {
-      titleEl.textContent = `${players[turn].label} — CHOOSE YOUR BEY`;
+      titleEl.textContent = isMobile ? 'CHOOSE YOUR BEY' : `${players[turn].label}: CHOOSE YOUR BEY`;
     } else {
       titleEl.textContent = 'BATTLE READY';
     }
 
-    picksEl.innerHTML =
-      players
+    const labelHtml = (text) => `<span class="pick-label">${text}</span>`;
+
+    if (isMobile) {
+      picksEl.innerHTML = '';
+    } else {
+      const playerSlots = players
         .map((p, i) => {
           const pick = picks[i];
           const active = i === turn ? ' active' : '';
           const chip = pick
             ? `<span class="pick-bey" style="--bey-color:${pick.color}">${pick.name}</span>`
-            : `<span class="pick-bey empty">— choosing —</span>`;
-          return `<div class="pick-slot${active}"><span class="pick-label">${p.label}</span>${chip}</div>`;
+              : `<span class="pick-bey empty">choosing...</span>`;
+          return `<div class="pick-slot${active}">${labelHtml(p.label)}${chip}</div>`;
         })
-        .join('') +
-      (rivalLabel
-        ? (() => {
-            const chip = rivalPick
-              ? `<span class="pick-bey" style="--bey-color:${rivalPick.color}">${rivalPick.name}</span>`
-              : `<span class="pick-bey empty">random</span>`;
-            const sub = rivalPick ? '' : '<span class="pick-sub">rolled after you select</span>';
-            return `<div class="pick-slot rival-slot"><span class="pick-label">${rivalLabel}</span>${chip}${sub}</div>`;
-          })()
-        : '');
+        .join('');
+
+      let rivalSlot = '';
+      let rivalNote = '';
+      if (rivalLabel) {
+        const chip = rivalPick
+          ? `<span class="pick-bey" style="--bey-color:${rivalPick.color}">${rivalPick.name}</span>`
+          : `<span class="pick-bey empty">random</span>`;
+        rivalSlot = `<div class="pick-slot rival-slot">${labelHtml(rivalLabel)}${chip}</div>`;
+        if (!rivalPick) {
+          rivalNote = '<p class="select-picks-note">Rival rolled after you select</p>';
+        }
+      }
+
+      picksEl.innerHTML = `<div class="select-picks-chips">${playerSlots}${rivalSlot}</div>${rivalNote}`;
+    }
+  }
+
+  function prevOpenIndex(from) {
+    for (let step = 1; step <= ROSTER.length; step++) {
+      const idx = (from - step + ROSTER.length) % ROSTER.length;
+      if (!locked.has(ROSTER[idx].id)) return idx;
+    }
+    return from;
   }
 
   prevBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + ROSTER.length) % ROSTER.length;
+    currentIndex = prevOpenIndex(currentIndex);
     render();
   });
   nextBtn.addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % ROSTER.length;
+    currentIndex = nextOpenIndex((currentIndex + 1) % ROSTER.length);
     render();
   });
 
@@ -219,14 +248,19 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       return BEYS.filter((b) => isBeyPlayable(b) && !locked.has(b.id));
     },
     /** Restart picks (e.g. when switching VS CPU / 2-player). */
-    reset(newPlayers) {
+    reset(newPlayers, { keepCarousel = false } = {}) {
+      const prevId = keepCarousel ? ROSTER[currentIndex]?.id : null;
       players.splice(0, players.length, ...newPlayers);
       locked.clear();
       picks.length = 0;
       rivalPick = null;
       turn = 0;
-      currentIndex = nextOpenIndex(0);
-      root.classList.remove('select-done');
+      if (prevId) {
+        const idx = ROSTER.findIndex((b) => b.id === prevId);
+        currentIndex = idx >= 0 ? idx : nextOpenIndex(0);
+      } else {
+        currentIndex = nextOpenIndex(0);
+      }
       render();
     },
     /** Show which bey the CPU / rival auto-picked. */

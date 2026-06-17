@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp01 } from '../utils/math.js';
 import { CONFIG } from '../config.js';
-import { LEONE_WALL_DURATION } from '../game/abilities.js';
+import { LEONE_WALL_DURATION, LEONE_WALL_REACH_MULT } from '../game/abilities.js';
 
 function makeMat(color, opacity, { additive = false, doubleSide = false } = {}) {
   return new THREE.MeshBasicMaterial({
@@ -163,7 +163,7 @@ export function createLeoneAbilityVfx(scene) {
     const geos = GEO_BY_KIND[kind];
     for (let i = 0; i < count; i++) {
       const tr = traits[i];
-      const mat = getMat(colors[tr.colorIdx], kind === 'mist');
+      const mat = getMat(colors[tr.colorIdx], kind === 'mist').clone();
       const mesh = new THREE.Mesh(geos[tr.sizeTier], mat);
       mesh.renderOrder = kind === 'mist' ? 6 : kind === 'debris' ? 4 : 5;
       mesh.visible = false;
@@ -283,8 +283,8 @@ export function createLeoneAbilityVfx(scene) {
       const bz = body.position.z;
       const floorY = CONFIG.FLOOR_Y + 0.02;
       const R = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-      const reach = body.userData.lionWallReach ?? R * 4.35;
-      const reachScale = reach / (R * 4.35);
+      const reach = body.userData.lionWallReach ?? R * LEONE_WALL_REACH_MULT;
+      const reachScale = reach / (R * LEONE_WALL_REACH_MULT);
 
       if (anchoring) {
         wallT = 0;

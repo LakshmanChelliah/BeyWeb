@@ -5,6 +5,9 @@ import { applySteerForce } from '../physics/steer.js';
 export function createGyroInput(canvas) {
   let calibBeta = 0;
   let calibGamma = 0;
+  let rawBeta = 0;
+  let rawGamma = 0;
+  let hasOrientation = false;
   let gyroBeta = 0;
   let gyroGamma = 0;
   let usingMouse = false;
@@ -13,6 +16,9 @@ export function createGyroInput(canvas) {
 
   function onDeviceOrientation(event) {
     if (event.beta == null || event.gamma == null) return;
+    rawBeta = event.beta;
+    rawGamma = event.gamma;
+    hasOrientation = true;
     gyroBeta = event.beta - calibBeta;
     gyroGamma = event.gamma - calibGamma;
   }
@@ -39,10 +45,20 @@ export function createGyroInput(canvas) {
     gyroGamma = 0;
   }
 
+  function calibrateNow() {
+    if (!hasOrientation) return false;
+    calibrateGyro({ beta: rawBeta, gamma: rawGamma });
+    return true;
+  }
+
   async function calibrateOnce() {
+    if (calibrateNow()) return;
     return new Promise((resolve) => {
       const handler = (e) => {
         calibrateGyro(e);
+        hasOrientation = true;
+        rawBeta = e.beta || 0;
+        rawGamma = e.gamma || 0;
         window.removeEventListener('deviceorientation', handler, true);
         resolve();
       };
@@ -52,9 +68,12 @@ export function createGyroInput(canvas) {
   }
 
   canvas.addEventListener('pointermove', (e) => {
-    usingMouse = true;
-    const nx = (e.clientX / window.innerWidth) * 2 - 1;
-    const ny = (e.clientY / window.innerHeight) * 2 - 1;
+    if (e.pointerType === 'mouse') {
+      usingMouse = true;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const nx = rect.width > 0 ? ((e.clientX - rect.left) / rect.width) * 2 - 1 : 0;
+    const ny = rect.height > 0 ? ((e.clientY - rect.top) / rect.height) * 2 - 1 : 0;
     mouseSteerX = nx * CONFIG.GYRO_CLAMP;
     mouseSteerZ = ny * CONFIG.GYRO_CLAMP;
   });
@@ -66,7 +85,8 @@ export function createGyroInput(canvas) {
   function applyGyroSteer(body, spin) {
     let tiltX;
     let tiltZ;
-    if (usingMouse) {
+    // Pointer fallback when no orientation sensor (desktop) or explicit mouse mode.
+    if (usingMouse || !hasOrientation) {
       tiltX = mouseSteerX;
       tiltZ = mouseSteerZ;
     } else {
@@ -87,6 +107,7 @@ export function createGyroInput(canvas) {
   return {
     requestMotionPermission,
     calibrateOnce,
+    calibrateNow,
     startListening,
     applyGyroSteer,
     setMouseFallback() {

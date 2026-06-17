@@ -6,7 +6,7 @@
  * `beyColorHex()`. `model` points at an optional GLB asset (the renderer falls
  * back to a procedural top mesh tinted with `color` when the file is missing).
  *
- * Stats are sourced from official Takara Tomy / Hasbro part-by-part star ratings
+ * packagingStars — Metal Fusion box/card ratings (1–5) for the select UI
  * (Energy Ring + Fusion Wheel + Spin Track + Performance Tip), normalized to 0–100.
  *
  * atk — scales knockback dealt on impact
@@ -29,7 +29,10 @@ export const BEYS = Object.freeze([
     type: 'Attack',
     desc: 'A relentless tornado assault. Rubber-flat tip makes it the fastest, most aggressive bey on the field.',
     // Storm wheel (ATK ****), Pegasus ring (ATK ****), RF rubber-flat tip (ATK ******)
-    atk: 92,
+    // Hasbro / Takara Tomy Metal Fusion card stars (1–5)
+    packagingStars: { atk: 5, def: 1, sta: 1 },
+    atk: 83,
+    move: 92,
     def: 28,
     sta: 22,
     color: '#3b82f6',
@@ -48,7 +51,9 @@ export const BEYS = Object.freeze([
     type: 'Attack',
     desc: 'Left-spin dragon. Activate Spin Steal to drain the opponent\'s spin on every clash.',
     // Meteo wheel, L-Drago II rubber ring (spin-steal), LF left-flat tip
-    atk: 85,
+    packagingStars: { atk: 4, def: 2, sta: 3 },
+    atk: 77,
+    move: 85,
     def: 32,
     sta: 52,
     color: '#ef4444',
@@ -67,8 +72,10 @@ export const BEYS = Object.freeze([
     type: 'Defense',
     desc: 'Kyoya\'s fortress bey. WB tip anchors the dish; Lion Gale Force Wall repels reckless rushdown.',
     // Rock (ATK * DEF **** STA **), Leone ring (ATK * DEF **** STA **), 145 track (STA **), WB (ATK * DEF ***** STA *)
-    // Hasbro card: Attack 1 · Defense 4 · Stamina 2
+  // Hasbro card: Attack 1 · Defense 4 · Stamina 2
+    packagingStars: { atk: 1, def: 4, sta: 2 },
     atk: 18,
+    move: 22.58, // steer +15% vs atk-only default; knockback still uses atk
     def: 91,
     sta: 46,
     color: '#22c55e',
@@ -85,8 +92,9 @@ export const BEYS = Object.freeze([
     id: 'libra',
     name: 'FLAME LIBRA',
     type: 'Stamina',
-    desc: 'Benkei\'s endurance bey. Sonic Shield deflects rivals; Sonic Buster channels at center into a slowing sand pit.',
+    desc: 'A stamina fortress built to outlast the field. ES tip holds spin forever; Sonic Shield repels rushdown and Sonic Buster drags rivals into center quicksand.',
     // Flame (ATK ** DEF * STA **), Libra ring, 145 track (STA **), ES tip (STA *****)
+    packagingStars: { atk: 2, def: 1, sta: 5 },
     atk: 42,
     def: 28,
     sta: 88,
@@ -110,7 +118,7 @@ export const BEYS = Object.freeze([
     sta: null,
     color: '#4b5563',
     model: 'flame_sagittario.glb',
-    available: true,
+    available: false,
   },
   {
     id: 'eagle',
@@ -122,15 +130,16 @@ export const BEYS = Object.freeze([
     sta: null,
     color: '#4b5563',
     model: 'earth_eagle.glb',
-    available: true,
+    available: false,
   },
   {
     id: 'bull',
     name: 'DARK BULL',
-    type: 'Attack',
-    desc: 'Maximum Stampede boosts speed and contact knockback; Red Horn Uppercut charges and launches foes — strongest near the rim.',
+    type: 'Balance',
+    desc: 'Maximum Stampede boosts speed and contact knockback; Red Horn Uppercut charges and launches foes. Strongest near the rim.',
     // Bull / Dark wheel (ATK ***), Bull ring, 145 track, HF hole flat
-    atk: 78,
+    packagingStars: { atk: 4, def: 2, sta: 3 },
+    atk: 70,
     move: 18, // steering matches Rock Leone; atk still drives knockback
     def: 38,
     sta: 34,
@@ -146,26 +155,18 @@ export const BEYS = Object.freeze([
   },
 ]);
 
-/** Beys that can actually be picked in the selection screen. */
-export const PLAYABLE_BEYS = Object.freeze(BEYS.filter((b) => b.available));
-
-/** Picks a random playable bey that is not the excluded one (for CPU rivals). */
-export function pickOpponentBey(excludedBey) {
-  const excludeId = typeof excludedBey === 'string' ? excludedBey : excludedBey?.id;
-  const pool = PLAYABLE_BEYS.filter((b) => b.id !== excludeId);
-  if (pool.length === 0) return PLAYABLE_BEYS[0] ?? null;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
-/** Converts a roster `color` CSS hex string to a numeric THREE color. */
-export function beyColorHex(color) {
-  return parseInt(color.replace('#', ''), 16);
-}
-
 export function getBeyById(id) {
   return BEYS.find((b) => b.id === id) || null;
 }
 
 export function isBeyPlayable(bey) {
   return Boolean(bey?.available && bey.atk != null);
+}
+
+/** Beys that can actually be picked in the selection screen. */
+export const PLAYABLE_BEYS = Object.freeze(BEYS.filter(isBeyPlayable));
+
+/** Converts a roster `color` CSS hex string to a numeric THREE color. */
+export function beyColorHex(color) {
+  return parseInt(color.replace('#', ''), 16);
 }

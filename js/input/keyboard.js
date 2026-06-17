@@ -1,7 +1,12 @@
 import { CONFIG } from '../config.js';
 import { applySteerForce } from '../physics/steer.js';
 
-export function createKeyboardInput(onStart, onRestart, onAbility) {
+export function createKeyboardInput(
+  onStart,
+  onRestart,
+  onAbility,
+  { canRestart = () => false, canStart = () => true, resolveAbilityKey } = {}
+) {
   const keys = {
     ArrowUp: false,
     ArrowDown: false,
@@ -13,12 +18,12 @@ export function createKeyboardInput(onStart, onRestart, onAbility) {
     KeyD: false,
   };
 
-  // Ability bindings: P1 (arrows) on the right side, P2 (WASD) on the left.
+  // P1: Q power · E special. P2 (2-player): . power · / special.
   const abilityKeys = {
-    Period: { player: 1, slot: 'power' },
-    Slash: { player: 1, slot: 'special' },
-    KeyQ: { player: 2, slot: 'power' },
-    KeyE: { player: 2, slot: 'special' },
+    KeyQ: { player: 1, slot: 'power' },
+    KeyE: { player: 1, slot: 'special' },
+    Period: { player: 2, slot: 'power' },
+    Slash: { player: 2, slot: 'special' },
   };
 
   function clearKeys() {
@@ -30,15 +35,22 @@ export function createKeyboardInput(onStart, onRestart, onAbility) {
       e.preventDefault();
       keys[e.code] = true;
     }
-    if (e.code in abilityKeys && !e.repeat) {
+    let abilityBinding;
+    if (resolveAbilityKey) {
+      const custom = resolveAbilityKey(e.code);
+      abilityBinding = custom !== undefined ? custom : abilityKeys[e.code];
+    } else {
+      abilityBinding = abilityKeys[e.code];
+    }
+    if (abilityBinding && !e.repeat) {
       e.preventDefault();
-      const { player, slot } = abilityKeys[e.code];
+      const { player, slot } = abilityBinding;
       onAbility?.(player, slot);
     }
     if (e.code === 'Enter' || e.code === 'Space') {
       e.preventDefault();
-      onStart?.();
-      onRestart?.();
+      if (canRestart()) onRestart?.();
+      else if (canStart()) onStart?.();
     }
   }
 

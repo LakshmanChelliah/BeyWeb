@@ -24,13 +24,14 @@ export function createPlaySetup(el, { show2Player = false, onChange } = {}) {
     <div class="play-setup-diff" aria-label="CPU difficulty">
       <span class="play-setup-diff-label">CPU difficulty</span>
       <div class="play-setup-diff-btns"></div>
-      <p class="play-setup-hint">CPU rival is random each match</p>
     </div>
+    <p class="play-setup-hint">CPU rival is random each match</p>
   `;
 
   const modesEl = el.querySelector('.play-setup-modes');
   const diffWrap = el.querySelector('.play-setup-diff');
   const diffBtns = el.querySelector('.play-setup-diff-btns');
+  const hintEl = el.querySelector('.play-setup-hint');
 
   for (const m of modeButtons) {
     const btn = document.createElement('button');
@@ -59,8 +60,25 @@ export function createPlaySetup(el, { show2Player = false, onChange } = {}) {
     diffBtns.querySelectorAll('.play-setup-diff-btn').forEach((btn) => {
       btn.classList.toggle('active', Number(btn.dataset.tier) === difficulty);
     });
-    const vsCpu = mode === GAME_MODES.CASUAL || mode === GAME_MODES.TOURNAMENT;
-    diffWrap.classList.toggle('hidden', !vsCpu);
+
+    const isCasual = mode === GAME_MODES.CASUAL;
+    const isTournament = mode === GAME_MODES.TOURNAMENT;
+    diffWrap.classList.toggle('hidden', !isCasual);
+    el.classList.toggle('play-setup--casual', isCasual);
+    el.classList.toggle('play-setup--tournament', isTournament);
+    el.classList.toggle('play-setup--two-player', mode === GAME_MODES.TWO_PLAYER);
+
+    if (hintEl) {
+      if (mode === GAME_MODES.TOURNAMENT) {
+        hintEl.textContent = 'Five rivals in order.';
+        hintEl.classList.remove('hidden');
+      } else if (isCasual) {
+        hintEl.textContent = 'CPU rival is random each match';
+        hintEl.classList.remove('hidden');
+      } else {
+        hintEl.classList.add('hidden');
+      }
+    }
   }
 
   function setMode(next) {

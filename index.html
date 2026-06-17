@@ -2,12 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Spin Sumo — Beyblade Arena</title>
-  <link rel="stylesheet" href="css/game.css" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="screen-orientation" content="portrait" />
+  <meta name="theme-color" content="#141b30" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Spin Sumo | Beyblade Arena</title>
+  <link rel="stylesheet" href="css/game.css?v=12" />
 </head>
 <body class="mobile">
+
+  <div id="orientation-lock" class="orientation-lock" aria-live="polite">
+    <div class="orientation-lock-card">
+      <div class="orientation-lock-icon" aria-hidden="true">↻</div>
+      <p>Rotate your phone to portrait to play</p>
+    </div>
+  </div>
 
   <canvas id="game-canvas"></canvas>
 
@@ -15,7 +27,7 @@
     <div class="hud-panel">
       <img class="hud-avatar" id="player-avatar" src="updatedLdragoLogo.png" alt="" />
       <div class="hud-info">
-        <div class="hud-label">You — Spin</div>
+        <div class="hud-label">You · Spin</div>
         <div class="hud-value" id="player-spin">100%</div>
         <div class="hud-bar-wrap"><div class="hud-bar" id="player-bar" style="width:100%"></div></div>
       </div>
@@ -23,7 +35,7 @@
     <div class="hud-panel hud-side-ai">
       <img class="hud-avatar" id="ai-avatar" src="pegasusLogo.png" alt="" />
       <div class="hud-info">
-        <div class="hud-label">Rival — Spin</div>
+        <div class="hud-label">Rival · Spin</div>
         <div class="hud-value" id="ai-spin">100%</div>
         <div class="hud-bar-wrap"><div class="hud-bar" id="ai-bar" style="width:100%"></div></div>
       </div>
@@ -38,12 +50,16 @@
 
   <div id="special-flash"><img id="special-flash-img" alt="" /></div>
 
-  <div id="select-overlay"><div id="play-setup" class="play-setup"></div></div>
+  <div id="select-overlay">
+    <div id="play-setup" class="play-setup"></div>
+    <div class="select-mount"></div>
+    <div class="select-picks" aria-live="polite"></div>
+  </div>
 
   <div id="start-overlay">
     <div class="logo-ring"></div>
     <h1>Spin Sumo</h1>
-    <p id="start-blurb">Tournament — best of 3 vs five random rivals. CPU ramps up each stage.</p>
+    <p id="start-blurb">Tournament: best of 3 vs five rivals in rising order.</p>
     <button id="btn-start">Calibrate &amp; Start</button>
     <p id="permission-hint">Requires motion sensor access on iOS. Hold phone flat when starting.</p>
   </div>
@@ -68,6 +84,6 @@
   }
   </script>
 
-  <script type="module" src="js/main-mobile.js"></script>
+  <script type="module" src="js/main-mobile.js?v=11"></script>
 </body>
 </html>

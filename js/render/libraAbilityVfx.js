@@ -1,36 +1,88 @@
 import * as THREE from 'three';
 import { clamp01 } from '../utils/math.js';
 import { CONFIG } from '../config.js';
-import { LIBRA_BUSTER_DURATION, LIBRA_BUSTER_RADIUS_MULT, LIBRA_SHIELD_DURATION } from '../game/abilities.js';
+import {
+  LIBRA_BUSTER_DURATION,
+  LIBRA_BUSTER_RADIUS_MULT,
+  LIBRA_BUSTER_SPREAD_DUR,
+  LIBRA_BUSTER_WINDUP_DUR,
+  LIBRA_SHIELD_DURATION,
+  effectiveSpecialWindup,
+  libraBusterSandRadius,
+} from '../game/abilities.js';
 
-function makeMat(color, opacity, { additive = false } = {}) {
+function makeMat(color, opacity, { additive = false, doubleSide = false, map = null } = {}) {
   return new THREE.MeshBasicMaterial({
     color,
+    map,
     transparent: true,
     opacity,
     depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    side: THREE.FrontSide,
+    side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
   });
 }
 
 function createMatCache() {
   const cache = new Map();
-  return (color, additive = false) => {
-    const key = `${color}|${additive ? 1 : 0}`;
-    if (!cache.has(key)) cache.set(key, makeMat(color, 0, { additive }));
+  return (color, additive = false, doubleSide = false) => {
+    const key = `${color}|${additive ? 1 : 0}|${doubleSide ? 1 : 0}`;
+    if (!cache.has(key)) cache.set(key, makeMat(color, 0, { additive, doubleSide }));
     return cache.get(key);
   };
+}
+
+/** Vertical rain-streak texture for the Sonic Buster energy column (show-accurate). */
+function createPillarStreakTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0, 0, 128, 256);
+
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * 128;
+    const w = 0.8 + Math.random() * 2.8;
+    const peak = 0.06 + Math.random() * 0.28;
+    const grad = ctx.createLinearGradient(x, 0, x, 256);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.15, `rgba(255,255,252,${peak})`);
+    grad.addColorStop(0.55, `rgba(230,255,200,${peak * 0.75})`);
+    grad.addColorStop(0.9, `rgba(210,250,170,${peak * 0.3})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, 0, w, 256);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(5, 1.5);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 const SHIELD_GREEN = 0x4ade80;
 const SHIELD_LIME = 0xa3e635;
 const SHIELD_PALE = 0xd9f99d;
 
-const SAND_LIGHT = 0xe8dcc8;
-const SAND_MID = 0xc4b59a;
-const SAND_DARK = 0x9a8b72;
-const SAND_DUST = 0xd6cbb8;
+const BUSTER_LIME = 0xecfccb;
+const BUSTER_NEON = 0xf7fee7;
+const BUSTER_WHITE = 0xffffff;
+const BUSTER_GLOW = 0xfefff5;
+
+const SAND_LIGHT = 0xe8d4b8;
+const SAND_MID = 0xc9a87a;
+const SAND_DARK = 0xa88455;
+const SAND_DUST = 0xd9bf98;
+const SAND_DEEP = 0x8f6f45;
+
+const PILLAR_HEIGHT = 24;
+const PILLAR_OUTER_R = 1.75;
+const PILLAR_MID_R = 1.1;
+const PILLAR_CORE_R = 0.58;
+const PILLAR_STREAK_COUNT = 52;
 
 const PIT_PARTICLE_COUNT = 48;
 const SHIELD_WISP_COUNT = 8;
@@ -49,10 +101,13 @@ export function createLibraAbilityVfx(scene) {
   const root = new THREE.Group();
   scene.add(root);
   const getMat = createMatCache();
+  const pillarStreakTex = createPillarStreakTexture();
 
   const shieldGroup = new THREE.Group();
+  const pillarGroup = new THREE.Group();
   const pitGroup = new THREE.Group();
   root.add(shieldGroup);
+  root.add(pillarGroup);
   root.add(pitGroup);
 
   const shieldAura = new THREE.Mesh(
@@ -82,24 +137,98 @@ export function createLibraAbilityVfx(scene) {
     shieldWisps.push({ mesh, phase: (i / SHIELD_WISP_COUNT) * Math.PI * 2, band: i % 3 });
   }
 
+  // --- Sonic Buster energy column (anime-style vertical pillar) ----------------
+  const pillarShell = new THREE.Mesh(
+    new THREE.CylinderGeometry(PILLAR_OUTER_R, PILLAR_OUTER_R * 1.04, PILLAR_HEIGHT, 40, 1, true),
+    makeMat(0xffffff, 0, { additive: true, doubleSide: true, map: pillarStreakTex })
+  );
+  pillarShell.position.y = PILLAR_HEIGHT * 0.5;
+  pillarShell.renderOrder = 8;
+  pillarGroup.add(pillarShell);
+
+  const pillarMid = new THREE.Mesh(
+    new THREE.CylinderGeometry(PILLAR_MID_R, PILLAR_MID_R * 0.98, PILLAR_HEIGHT * 0.98, 32, 1, true),
+    getMat(BUSTER_NEON, true, true)
+  );
+  pillarMid.position.y = PILLAR_HEIGHT * 0.5;
+  pillarMid.renderOrder = 9;
+  pillarGroup.add(pillarMid);
+
+  const pillarCore = new THREE.Mesh(
+    new THREE.CylinderGeometry(PILLAR_CORE_R, PILLAR_CORE_R * 0.92, PILLAR_HEIGHT * 0.95, 24, 1, true),
+    getMat(BUSTER_WHITE, true, true)
+  );
+  pillarCore.position.y = PILLAR_HEIGHT * 0.5;
+  pillarCore.renderOrder = 10;
+  pillarGroup.add(pillarCore);
+
+  const pillarSandFill = new THREE.Mesh(
+    new THREE.CircleGeometry(PILLAR_OUTER_R * 1.02, 36),
+    getMat(SAND_MID)
+  );
+  pillarSandFill.rotation.x = -Math.PI / 2;
+  pillarSandFill.position.y = 0.03;
+  pillarSandFill.renderOrder = 7;
+  pillarGroup.add(pillarSandFill);
+
+  const pillarBase = new THREE.Mesh(
+    new THREE.RingGeometry(PILLAR_CORE_R * 0.55, PILLAR_OUTER_R * 1.08, 36),
+    getMat(SAND_DARK)
+  );
+  pillarBase.rotation.x = -Math.PI / 2;
+  pillarBase.position.y = 0.06;
+  pillarBase.renderOrder = 11;
+  pillarGroup.add(pillarBase);
+
+  const pillarStreaks = [];
+  for (let i = 0; i < PILLAR_STREAK_COUNT; i++) {
+    const s = i + 211;
+    const angle = (i / PILLAR_STREAK_COUNT) * Math.PI * 2;
+    const r = PILLAR_OUTER_R * (0.55 + rand(s) * 0.38);
+    const h = 3.5 + rand(s + 1) * 14;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.06 + rand(s + 2) * 0.1, h),
+      getMat(rand(s + 3) > 0.45 ? BUSTER_GLOW : BUSTER_LIME, true)
+    );
+    mesh.rotation.y = angle;
+    mesh.renderOrder = 12;
+    pillarGroup.add(mesh);
+    pillarStreaks.push({
+      mesh,
+      angle,
+      radius: r,
+      height: h,
+      speed: 9 + rand(s + 4) * 14,
+      phase: rand(s + 5) * PILLAR_HEIGHT,
+    });
+  }
+
   const pitRing = new THREE.Mesh(
     new THREE.RingGeometry(0.55, 1.0, 32),
-    getMat(SAND_MID)
+    getMat(SAND_DARK)
   );
   pitRing.rotation.x = -Math.PI / 2;
   pitRing.renderOrder = 2;
   pitGroup.add(pitRing);
 
+  const sandWave = new THREE.Mesh(
+    new THREE.RingGeometry(0.94, 1.0, 40),
+    getMat(SAND_LIGHT)
+  );
+  sandWave.rotation.x = -Math.PI / 2;
+  sandWave.renderOrder = 4;
+  pitGroup.add(sandWave);
+
   const pitInner = new THREE.Mesh(
     new THREE.CircleGeometry(0.54, 32),
-    getMat(SAND_DARK)
+    getMat(SAND_MID)
   );
   pitInner.rotation.x = -Math.PI / 2;
   pitInner.renderOrder = 1;
   pitGroup.add(pitInner);
 
   const pitParticles = [];
-  const sandColors = [SAND_LIGHT, SAND_MID, SAND_DARK, SAND_DUST];
+  const sandColors = [SAND_LIGHT, SAND_MID, SAND_DARK, SAND_DUST, SAND_DEEP];
   for (let i = 0; i < PIT_PARTICLE_COUNT; i++) {
     const s = i + 41;
     const mesh = new THREE.Mesh(
@@ -120,6 +249,7 @@ export function createLibraAbilityVfx(scene) {
   let shieldSpin = 0;
   let pitSpin = 0;
   let pitT = 0;
+  let pillarScroll = 0;
 
   function hideShield() {
     shieldAura.material.opacity = 0;
@@ -127,8 +257,19 @@ export function createLibraAbilityVfx(scene) {
     for (const w of shieldWisps) w.mesh.material.opacity = 0;
   }
 
+  function hidePillar() {
+    pillarShell.material.opacity = 0;
+    pillarMid.material.opacity = 0;
+    pillarCore.material.opacity = 0;
+    pillarSandFill.material.opacity = 0;
+    pillarBase.material.opacity = 0;
+    for (const s of pillarStreaks) s.mesh.material.opacity = 0;
+    pillarGroup.scale.set(1, 0.001, 1);
+  }
+
   function hidePit() {
     pitRing.material.opacity = 0;
+    sandWave.material.opacity = 0;
     pitInner.material.opacity = 0;
     for (const p of pitParticles) p.mesh.material.opacity = 0;
   }
@@ -137,13 +278,90 @@ export function createLibraAbilityVfx(scene) {
     mesh.quaternion.copy(camera.quaternion);
   }
 
+  function updateSandPit(body, camera, dt, reach, env) {
+    const cx = body.position.x + (body.userData.flightOffsetX ?? 0);
+    const cz = body.position.z + (body.userData.flightOffsetZ ?? 0);
+    pitGroup.position.set(cx, CONFIG.FLOOR_Y + 0.02, cz);
+
+    const pitR = body.userData.sonicBusterSpread ?? libraBusterSandRadius(reach, pitT);
+    const spreadT = clamp01(pitT / LIBRA_BUSTER_SPREAD_DUR);
+    const stillGrowing = spreadT < 0.98;
+
+    pitRing.scale.set(pitR, pitR, 1);
+    pitRing.material.opacity = 0.42 * env * Math.min(1, pitR / (reach * 0.2 + 0.01));
+
+    pitInner.scale.set(pitR * 0.7, pitR * 0.7, 1);
+    pitInner.material.opacity = 0.34 * env * Math.min(1, pitR / (reach * 0.15 + 0.01));
+
+    sandWave.position.y = 0.05;
+    sandWave.scale.set(pitR, pitR, 1);
+    sandWave.material.opacity = stillGrowing
+      ? (0.2 + 0.14 * Math.sin(pitT * 10)) * env
+      : 0;
+
+    for (const p of pitParticles) {
+      p.phase += dt * p.speed * (1 + pitSpin * 0.08);
+      const band = 0.22 + p.radius * 0.78;
+      const pr = pitR * band;
+      const h = 0.03 + p.rise * (0.4 + 0.6 * band);
+      p.mesh.position.set(
+        Math.cos(p.phase + pitSpin) * pr,
+        h,
+        Math.sin(p.phase + pitSpin) * pr
+      );
+      billboard(p.mesh, camera);
+      const atFront = band > 0.72 ? 1.12 : 0.85;
+      const flicker = 0.55 + 0.45 * Math.sin(p.phase * 3 + pitSpin);
+      p.mesh.material.opacity = 0.38 * flicker * env * atFront;
+    }
+  }
+
+  function updatePillar(body, camera, dt, env, growY) {
+    const bx = body.position.x + (body.userData.flightOffsetX ?? 0);
+    const bz = body.position.z + (body.userData.flightOffsetZ ?? 0);
+    const floorY = CONFIG.FLOOR_Y + 0.02;
+
+    pillarGroup.position.set(bx, floorY, bz);
+    pillarGroup.scale.set(1, Math.max(0.04, growY), 1);
+
+    pillarScroll += dt * 0.75;
+    pillarStreakTex.offset.y = pillarScroll;
+
+    const pulse = 0.88 + 0.12 * Math.sin(pitT * 6);
+    const shellOp = 0.2 * env * pulse;
+    const midOp = 0.1 * env * pulse;
+    const coreOp = 0.16 * env;
+    const baseOp = 0.48 * env * (0.92 + 0.08 * Math.sin(pitT * 8));
+
+    pillarShell.material.opacity = shellOp;
+    pillarMid.material.opacity = midOp;
+    pillarCore.material.opacity = coreOp;
+    pillarSandFill.material.opacity = baseOp;
+    pillarBase.material.opacity = baseOp * 0.85;
+
+    for (const s of pillarStreaks) {
+      s.phase = (s.phase + s.speed * dt) % PILLAR_HEIGHT;
+      const y = s.phase;
+      s.mesh.position.set(
+        Math.cos(s.angle) * s.radius,
+        y,
+        Math.sin(s.angle) * s.radius
+      );
+      s.mesh.rotation.y = s.angle;
+      const streakEnv = env * clamp01(1 - Math.abs(y - PILLAR_HEIGHT * 0.45) / (PILLAR_HEIGHT * 0.55));
+      s.mesh.material.opacity = (0.14 + 0.1 * Math.sin(pitT * 5 + s.angle * 3)) * streakEnv;
+    }
+  }
+
   function reset() {
     root.visible = false;
     hideShield();
+    hidePillar();
     hidePit();
     shieldSpin = 0;
     pitSpin = 0;
     pitT = 0;
+    pillarScroll = 0;
   }
 
   reset();
@@ -170,10 +388,9 @@ export function createLibraAbilityVfx(scene) {
       const bz = body.position.z;
       const floorY = CONFIG.FLOOR_Y + 0.02;
       const R = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-      const yBase = body.position.y + (body.userData.visualYOffset ?? 0)
-        + (body.userData.flightLift ?? 0);
 
       if (sonicShield) {
+        hidePillar();
         hidePit();
         shieldGroup.position.set(bx, floorY, bz);
         shieldSpin += dt * 4.8;
@@ -209,58 +426,23 @@ export function createLibraAbilityVfx(scene) {
 
       if (busterWindup || sonicBuster) {
         hideShield();
-        const pitX = body.userData.sonicBusterX ?? bx;
-        const pitZ = body.userData.sonicBusterZ ?? bz;
         const reach = body.userData.sonicBusterReach ?? R * LIBRA_BUSTER_RADIUS_MULT;
-        pitGroup.position.set(pitX, floorY, pitZ);
         pitSpin += dt * (busterWindup ? 2.8 : 4.6);
         pitT += dt;
 
-        if (busterWindup && !sonicBuster) {
-          const grow = clamp01(pitT / 0.45);
-          const e = easeOut(grow);
-          const r = R * (0.5 + e * 1.4);
-          pitRing.scale.set(r, r, 1);
-          pitRing.material.opacity = 0.35 * e;
-          pitInner.scale.set(r * 0.55, r * 0.55, 1);
-          pitInner.material.opacity = 0.2 * e;
-          for (const p of pitParticles) {
-            p.phase += dt * p.speed * 2;
-            const pr = r * p.radius * e;
-            p.mesh.position.set(
-              Math.cos(p.phase) * pr,
-              0.04 + p.rise * e,
-              Math.sin(p.phase) * pr
-            );
-            billboard(p.mesh, camera);
-            p.mesh.material.opacity = 0.3 * e;
-          }
-        } else {
-          const fadeIn = easeOut(Math.min(1, pitT / 0.22));
-          const fadeOut = clamp01((LIBRA_BUSTER_DURATION - pitT) / 0.35);
-          const env = fadeIn * fadeOut;
-          const pitR = reach;
+        const libraWindupDur = effectiveSpecialWindup(LIBRA_BUSTER_WINDUP_DUR);
+        const fadeIn = sonicBuster
+          ? easeOut(Math.min(1, pitT / 0.22))
+          : easeOut(clamp01(pitT / libraWindupDur));
+        const fadeOut = sonicBuster
+          ? clamp01((LIBRA_BUSTER_DURATION - Math.max(0, pitT - libraWindupDur)) / 0.35)
+          : 1;
+        const env = fadeIn * Math.max(0, fadeOut);
 
-          pitRing.scale.set(pitR, pitR, 1);
-          pitRing.material.opacity = 0.55 * env;
-          pitInner.scale.set(pitR * 0.88, pitR * 0.88, 1);
-          pitInner.material.opacity = 0.38 * env;
-
-          for (const p of pitParticles) {
-            p.phase += dt * p.speed * (1 + pitSpin * 0.08);
-            const swirl = p.radius * (0.35 + 0.65 * Math.sin(pitSpin * 0.4 + p.phase));
-            const pr = pitR * swirl;
-            const h = 0.03 + p.rise * (0.5 + 0.5 * Math.sin(p.phase * 2));
-            p.mesh.position.set(
-              Math.cos(p.phase + pitSpin) * pr,
-              h,
-              Math.sin(p.phase + pitSpin) * pr
-            );
-            billboard(p.mesh, camera);
-            const flicker = 0.55 + 0.45 * Math.sin(p.phase * 3 + pitSpin);
-            p.mesh.material.opacity = 0.42 * flicker * env;
-          }
-        }
+        const spread = easeOut(clamp01(pitT / LIBRA_BUSTER_SPREAD_DUR));
+        const pillarGrow = 0.05 + spread * 0.95;
+        updatePillar(body, camera, dt, env, pillarGrow);
+        updateSandPit(body, camera, dt, reach, env);
       }
     },
     reset,

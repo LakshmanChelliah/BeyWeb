@@ -1,9 +1,17 @@
-import { resetAIController, setAIDifficulty, getDifficultyLabel, AI_TIER_MAX } from '../input/ai.js';
+import {
+  resetAIController,
+  setAIDifficulty,
+  setAIContext,
+  getDifficultyLabel,
+  AI_TIER_MAX,
+} from '../input/ai.js';
 import {
   createCampaign,
   CAMPAIGN_OPPONENT_IDS,
   CAMPAIGN_STAGE_COUNT,
+  getAiTierForOpponentId,
   pickRandomRival,
+  pickTournamentOpponent,
 } from './campaign.js';
 import { createCasualMode } from './casualMode.js';
 
@@ -35,18 +43,26 @@ export function createCampaignController({
 
   function getEffectiveAiTier() {
     if (activeMode === 'casual') return casual.getAiTier();
-    return Math.min(userDifficultyTier + tournament.getOpponentIndex(), AI_TIER_MAX);
+    const stage = tournament.getOpponentIndex();
+    const opp = tournament.getCurrentOpponent();
+    const beyTier = opp ? getAiTierForOpponentId(opp.id) : stage;
+    return Math.min(Math.max(stage, beyTier), AI_TIER_MAX);
+  }
+
+  function setTournamentOpponent() {
+    const opp = pickTournamentOpponent(tournament.getOpponentIndex(), getPlayerBey());
+    tournament.setOpponent(opp);
+    return opp;
   }
 
   function rollAndSetOpponent() {
     const playerBey = getPlayerBey();
-    const opp = pickRandomRival(playerBey);
     if (activeMode === 'casual') {
+      const opp = pickRandomRival(playerBey);
       casual.start(opp, userDifficultyTier);
-    } else {
-      tournament.setOpponent(opp);
+      return opp;
     }
-    return opp;
+    return setTournamentOpponent();
   }
 
   function updateHud() {
@@ -74,6 +90,7 @@ export function createCampaignController({
   }
 
   function beginOpponent() {
+    setAIContext({ tournament: activeMode !== 'casual' });
     setAIDifficulty(getEffectiveAiTier());
     const opp = currentMode().getCurrentOpponent();
     onOpponentChange(opp);
@@ -85,23 +102,24 @@ export function createCampaignController({
     const oppName = opp?.name ?? 'CPU';
 
     if (result.outcome === 'DRAW') {
-      restartAction = 'rematch-random';
+      restartAction = 'rematch-same';
       btnRestart.textContent = 'Rematch';
-      gameoverMsg.textContent = `Draw vs ${oppName} — fight again!`;
+      gameoverMsg.textContent = `Draw vs ${oppName}. Fight again!`;
       return;
     }
 
-    restartAction = 'rematch-random';
-    btnRestart.textContent = result.winner === 1 ? 'Play Again' : 'Try Again';
-
     if (result.winner === 1) {
+      restartAction = 'rematch-random';
+      btnRestart.textContent = 'Next Rival';
       gameoverTitle.textContent = 'VICTORY!';
       gameoverTitle.className = 'win';
       gameoverMsg.textContent = `You defeated ${oppName}! Next rival is random.`;
     } else {
+      restartAction = 'rematch-same';
+      btnRestart.textContent = 'Try Again';
       gameoverTitle.textContent = 'DEFEATED';
       gameoverTitle.className = 'lose';
-      gameoverMsg.textContent = `${oppName} wins — try again!`;
+      gameoverMsg.textContent = `${oppName} wins. Try again!`;
     }
   }
 
@@ -116,7 +134,7 @@ export function createCampaignController({
     if (isDraw) {
       restartAction = 'next-round';
       btnRestart.textContent = 'Rematch';
-      gameoverMsg.textContent = `${scoreLine} — rematch this round.`;
+      gameoverMsg.textContent = `${scoreLine}. Rematch this round.`;
       updateHud();
       return;
     }
@@ -124,7 +142,7 @@ export function createCampaignController({
     if (seriesStatus === 'ongoing') {
       restartAction = 'next-round';
       btnRestart.textContent = 'Next Round';
-      gameoverMsg.textContent = `${scoreLine} — first to 2 wins the series.`;
+      gameoverMsg.textContent = `${scoreLine}. First to 2 wins the series.`;
       updateHud();
       return;
     }
@@ -134,7 +152,7 @@ export function createCampaignController({
       btnRestart.textContent = 'Try Again';
       gameoverTitle.textContent = 'DEFEATED';
       gameoverTitle.className = 'lose';
-      gameoverMsg.textContent = `${scoreLine} — the CPU won this series.`;
+      gameoverMsg.textContent = `${scoreLine}. The CPU won this series.`;
       campaignHud?.classList.add('hidden');
       return;
     }
@@ -144,7 +162,7 @@ export function createCampaignController({
       btnRestart.textContent = 'Play Again';
       gameoverTitle.textContent = 'CHAMPION!';
       gameoverTitle.className = 'win';
-      gameoverMsg.textContent = `You beat all ${CAMPAIGN_STAGE_COUNT} rivals — tournament complete!`;
+      gameoverMsg.textContent = `You beat all ${CAMPAIGN_STAGE_COUNT} rivals. Tournament complete!`;
       campaignHud?.classList.add('hidden');
       return;
     }
@@ -153,7 +171,7 @@ export function createCampaignController({
     btnRestart.textContent = 'Next Rival';
     gameoverTitle.textContent = 'SERIES WON!';
     gameoverTitle.className = 'win';
-    gameoverMsg.textContent = `${scoreLine} — next rival is random (tougher CPU).`;
+    gameoverMsg.textContent = `${scoreLine}. Next rival awaits (tougher CPU).`;
   }
 
   function handleMatchEnd(result) {
@@ -207,12 +225,10 @@ export function createCampaignController({
     beginOpponent,
     handleMatchEnd,
     handleRestart,
-    startTournament(playerBey, difficulty) {
+    startTournament(playerBey) {
       activeMode = 'tournament';
-      userDifficultyTier = difficulty ?? 1;
       tournament.start();
-      const opp = pickRandomRival(playerBey);
-      tournament.setOpponent(opp);
+      setTournamentOpponent();
       beginOpponent();
     },
     startCasual(playerBey, difficulty) {
@@ -224,6 +240,7 @@ export function createCampaignController({
     },
     resetCampaign() {
       activeMode = null;
+      setAIContext({ tournament: false });
       tournament.reset();
       casual.reset();
       updateHud();
@@ -233,7 +250,7 @@ export function createCampaignController({
     },
     /** @deprecated Use startTournament */
     startCampaign() {
-      this.startTournament(getPlayerBey(), userDifficultyTier);
+      this.startTournament(getPlayerBey());
     },
   };
 }
