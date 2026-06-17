@@ -252,12 +252,20 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       if (sp.ability.id === 'ldrago_supreme_flight') {
         const body = side === 'player' ? state.playerBody : state.aiBody;
         const repulse = body?.userData.flightRepulseT ?? 0;
+        const launch = body?.userData.ldragoFlightLaunchT ?? 0;
         const windup = body?.userData.ldragoFlightWindup;
         const active = body?.userData.airborne && body?.userData.invulnerable;
         const pulse = 0.72 + 0.28 * Math.sin(performance.now() * 0.011);
         let base = pulse * 1.35;
         if (windup) base = Math.max(base, pulse * 1.65);
         if (active) base = Math.max(base, pulse * 1.85);
+        if (launch > 0) base = Math.max(base, 2.8 + launch * 1.2);
+        if (body?.userData.ldragoLightningCharging) {
+          base = Math.max(base, pulse * 2.15);
+        }
+        if (body?.userData.ldragoFlightRerising) {
+          base = Math.max(base, pulse * 2.05);
+        }
         const intensity = repulse > 0 ? Math.max(base, 2.0 + repulse * 1.1) : base;
         return { color: sp.ability.glow, intensity };
       }

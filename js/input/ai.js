@@ -307,6 +307,7 @@ export function tickAIAbilities(state, onTrigger) {
   if (!state.abilities?.ai || state.launchGrace > 0 || !state.gameRunning || state.gameFrozen) {
     return;
   }
+  if (CONFIG.ABILITY_TEST_NO_DELAYS) return;
 
   const { decisionInterval, specialReach, powerReach } = decisionConfig();
 

@@ -91,4 +91,7 @@ export const CONFIG = Object.freeze({
   /** Y below this after leaving the platform edge ends the KO sequence. */
   PLATFORM_FALL_Y: -2.5,
   RING_OUT_MAX_DUR: 4.5,
+
+  /** TEMP: set false before release — skips charge, cooldown, and special windup. */
+  ABILITY_TEST_NO_DELAYS: false,
 });
