@@ -38,6 +38,8 @@ export function createAppBootstrap({
   let onlineFlowEl = null;
   let onlineLobby = null;
   let onlineStarted = false;
+  /** @type {ReturnType<typeof buildInput> | null} */
+  let input = null;
 
   const netClient = createNetClient();
   const inputBuffer = createInputBuffer();
@@ -161,6 +163,7 @@ export function createAppBootstrap({
         createOnlineSelection({
           root: flow,
           netClient,
+          onPrepareMotion: () => input?.prepareOnline?.(),
           onRevealComplete() {
             onlineCtrl.start(netClient.slot);
             onlineCtrl.updateHud();
@@ -183,6 +186,7 @@ export function createAppBootstrap({
     createOnlineSelection({
       root: flow,
       netClient,
+      onPrepareMotion: () => input?.prepareOnline?.(),
       onRevealComplete() {
         onlineCtrl.start(netClient.slot);
         onlineCtrl.updateHud();
@@ -284,6 +288,7 @@ export function createAppBootstrap({
       applyModeUi();
 
       if (isOnline(gameMode)) {
+        input?.prepareOnline?.();
         startOnlineFlow({ asHost: true });
       } else {
         onlineStarted = false;
@@ -300,7 +305,7 @@ export function createAppBootstrap({
     },
   });
 
-  const input = buildInput({
+  input = buildInput({
     getGameRef: () => gameRef,
     getGameMode: () => gameMode,
     getBeysChosen: () => beysChosen,

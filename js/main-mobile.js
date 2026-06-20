@@ -23,6 +23,45 @@ const playSetupEl = document.getElementById('play-setup');
 const tiltHint = document.getElementById('tilt-hint');
 const gyro = createGyroInput(document.getElementById('game-canvas'));
 
+function updatePermissionHint(granted) {
+  if (!permissionHint) return;
+  if (granted && gyro.isActive()) {
+    permissionHint.textContent = 'Hold phone at your play angle, then tap Recalibrate if drift occurs.';
+    return;
+  }
+  if (granted && gyro.isUsingFallback()) {
+    permissionHint.textContent = 'Drag on the arena to steer until motion sensors activate.';
+    return;
+  }
+  permissionHint.textContent = gyro.isIos
+    ? 'Tap Enable Motion on first load. Hold phone at your play angle when calibrating.'
+    : 'Tilt phone to steer. Drag on the arena if motion is unavailable.';
+}
+
+async function ensureGyro({ calibrate = true } = {}) {
+  lockPortraitOrientation();
+  const granted = await gyro.enable({ calibrate });
+  updatePermissionHint(granted);
+  return granted;
+}
+
+// iOS requires motion permission from a user gesture — bind the first tap anywhere.
+let motionGestureBound = false;
+function bindMotionGesture() {
+  if (motionGestureBound) return;
+  motionGestureBound = true;
+  document.addEventListener(
+    'pointerdown',
+    () => {
+      ensureGyro({ calibrate: false }).then((granted) => {
+        updatePermissionHint(granted);
+      });
+    },
+    { once: true, passive: true }
+  );
+}
+bindMotionGesture();
+
 createAppBootstrap({
   platform: 'mobile',
   canvas: document.getElementById('game-canvas'),
@@ -64,16 +103,10 @@ createAppBootstrap({
 
     let pingTimer = 0;
 
-    async function ensureGyro() {
-      lockPortraitOrientation();
-      const granted = await gyro.requestMotionPermission();
-      if (!granted) {
-        permissionHint.textContent =
-          'Motion permission denied. Use touch drag to steer instead.';
-        gyro.setMouseFallback();
-      }
-      gyro.startListening();
-      await gyro.calibrateOnce();
+    function syncGyroSteer(state) {
+      const dir = gyro.getSteerDirection();
+      inputBuffer.setSteer(dir.x, dir.y);
+      return dir;
     }
 
     return {
@@ -82,13 +115,13 @@ createAppBootstrap({
       },
       applySteering(state) {
         if (getIsOnline()) {
-          gyro.applyGyroSteer(state.playerBody, state.playerSpin);
-          const dir = gyro.getSteerDirection();
-          inputBuffer.setSteer(dir.x, dir.y);
+          syncGyroSteer(state);
           remote.applySteering(state);
           return;
         }
-        gyro.applyGyroSteer(state.playerBody, state.playerSpin);
+        const body = state.playerBody;
+        const spin = state.playerSpin;
+        gyro.applyGyroSteer(body, spin);
         applyAISteering(state.aiBody, state.playerBody, state.aiSpin, state.playerSpin);
         tickAIAbilities(state, (slot) => getGameRef().triggerAbility('ai', slot));
       },
@@ -105,13 +138,14 @@ createAppBootstrap({
         });
       },
       async onStartClick(startGame) {
-        if (getIsOnline()) {
-          await ensureGyro();
-          return;
-        }
         btnStart.disabled = true;
         btnStart.textContent = 'Requesting…';
         await ensureGyro();
+        if (getIsOnline()) {
+          btnStart.textContent = 'Waiting for match…';
+          btnStart.disabled = true;
+          return;
+        }
         startGame();
         campaignCtrl.updateHud();
       },
@@ -134,19 +168,10 @@ createAppBootstrap({
         if (!getIsOnline()) openBeySelect();
       },
       isAwaitingRoundReady: () => onlineCtrl?.isAwaitingRoundReady() ?? false,
-      prepareOnline: ensureGyro,
+      prepareOnline: () => ensureGyro(),
       onRecalibrate() {
-        if (getIsOnline()) {
+        ensureGyro().then(() => {
           gyro.calibrateNow();
-          return;
-        }
-        if (!btnRecalibrate || btnRecalibrate.disabled) return;
-        btnRecalibrate.disabled = true;
-        btnRecalibrate.setAttribute('aria-busy', 'true');
-        gyro.calibrateNow();
-        requestAnimationFrame(() => {
-          btnRecalibrate.disabled = false;
-          btnRecalibrate.removeAttribute('aria-busy');
         });
       },
     };
@@ -157,6 +182,7 @@ createAppBootstrap({
       btnStart.disabled = true;
     } else {
       btnStart.textContent = 'Calibrate & Start';
+      btnStart.disabled = false;
     }
   },
 });

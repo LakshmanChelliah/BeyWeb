@@ -6,7 +6,7 @@ import { MSG } from '../net/protocol.js';
 /**
  * Online bey selection: full carousel for you, mystery card for opponent.
  */
-export function createOnlineSelection({ root, netClient, onRevealComplete }) {
+export function createOnlineSelection({ root, netClient, onRevealComplete, onPrepareMotion }) {
   const ROSTER = BEYS.filter(isBeyPlayable);
   let currentIndex = 0;
   let locked = false;
@@ -143,6 +143,7 @@ export function createOnlineSelection({ root, netClient, onRevealComplete }) {
 
   lockBtn.addEventListener('click', () => {
     if (!selectedBey || locked) return;
+    onPrepareMotion?.();
     locked = true;
     netClient.lockBey(selectedBey.id);
     render();
