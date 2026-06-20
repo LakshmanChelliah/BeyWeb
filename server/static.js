@@ -26,6 +26,7 @@ const ROUTES = {
   '/': 'index.html',
   '/pc': 'pc.html',
   '/pc/': 'pc.html',
+  '/pc.html': 'pc.html',
 };
 
 function resolveStaticPath(pathname) {

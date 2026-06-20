@@ -1,10 +1,8 @@
 /**
- * Route room invite links to the right client entry (mobile / vs PC).
+ * Route visitors to the right client entry (mobile / vs PC).
  * Loaded synchronously in index.html and pc.html before the app boots.
  */
-(function routeInviteEntry() {
-  if (!location.search.includes('room=')) return;
-
+(function routeEntry() {
   const path = location.pathname;
   const onPc = /\/pc\/?$/i.test(path) || /pc\.html$/i.test(path);
   const ua = navigator.userAgent || '';
