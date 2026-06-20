@@ -110,6 +110,20 @@ export function createGyroInput(canvas) {
     calibrateNow,
     startListening,
     applyGyroSteer,
+    getSteerDirection() {
+      let tiltX;
+      let tiltZ;
+      if (usingMouse || !hasOrientation) {
+        tiltX = mouseSteerX;
+        tiltZ = mouseSteerZ;
+      } else {
+        tiltX = THREE.MathUtils.clamp(gyroGamma, -CONFIG.GYRO_CLAMP, CONFIG.GYRO_CLAMP);
+        tiltZ = THREE.MathUtils.clamp(gyroBeta, -CONFIG.GYRO_CLAMP, CONFIG.GYRO_CLAMP);
+      }
+      const len = Math.hypot(tiltX, tiltZ);
+      if (len < 0.01) return { x: 0, y: 0 };
+      return { x: tiltX / len, y: tiltZ / len };
+    },
     setMouseFallback() {
       usingMouse = true;
     },

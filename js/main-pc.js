@@ -1,7 +1,9 @@
 import { createKeyboardInput } from './input/keyboard.js';
 import { applyAISteering, tickAIAbilities } from './input/ai.js';
 import { createAppBootstrap } from './app/bootstrap.js';
-import { GAME_MODES, isVsCpu, modeBlurb } from './game/modes.js';
+import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from './game/modes.js';
+import { createRemoteInput } from './net/remoteInput.js';
+import { steerFromKeys, PC_STEER_MAP } from './net/inputBuffer.js';
 
 const startOverlay = document.getElementById('start-overlay');
 const selectOverlay = document.getElementById('select-overlay');
@@ -21,17 +23,31 @@ createAppBootstrap({
   startOverlay,
   btnStart,
   show2Player: true,
-  applyPlatformModeUi({ gameMode, isVsCpu: vsCpu }) {
+  applyPlatformModeUi({ gameMode, isVsCpu: vsCpu, isOnline: online }) {
     document.body.classList.toggle('vs-cpu', vsCpu);
     document.body.classList.toggle('vs-2p', gameMode === GAME_MODES.TWO_PLAYER);
+    document.body.classList.toggle('vs-online', online);
 
-    if (playerHudLabel) playerHudLabel.textContent = vsCpu ? 'You · Spin' : 'P1 · Spin';
-    if (aiHudLabel) aiHudLabel.textContent = vsCpu ? 'CPU · Spin' : 'P2 · Spin';
+    const btnChangeBey = document.getElementById('btn-change-bey');
+    btnChangeBey?.classList.toggle('hidden', online);
+
+    if (playerHudLabel) {
+      playerHudLabel.textContent = online ? 'You · Spin' : vsCpu ? 'You · Spin' : 'P1 · Spin';
+    }
+    if (aiHudLabel) {
+      aiHudLabel.textContent = online ? 'Rival · Spin' : vsCpu ? 'CPU · Spin' : 'P2 · Spin';
+    }
 
     if (controlsHint) {
-      controlsHint.innerHTML = vsCpu
-        ? 'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special'
-        : 'P1: Arrows · <kbd>Q</kbd> power · <kbd>E</kbd> special &nbsp;|&nbsp; P2: WASD · <kbd>.</kbd> power · <kbd>/</kbd> special';
+      if (online) {
+        controlsHint.innerHTML =
+          'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special · Best of 3';
+      } else if (vsCpu) {
+        controlsHint.innerHTML = 'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special';
+      } else {
+        controlsHint.innerHTML =
+          'P1: WASD · <kbd>Q</kbd> power · <kbd>E</kbd> special &nbsp;|&nbsp; P2: Arrows · <kbd>,</kbd> power · <kbd>.</kbd> special';
+      }
     }
 
     if (startBlurb) startBlurb.textContent = modeBlurb(gameMode);
@@ -47,36 +63,102 @@ createAppBootstrap({
     getGameMode,
     getBeysChosen,
     campaignCtrl,
+    onlineCtrl,
     openBeySelect,
     startOverlay,
     resetAIController,
+    netClient,
+    inputBuffer,
+    netDebug,
+    getIsOnline,
+    getLocalSlot,
   }) {
+    function startOfflineMatch(startGame = () => getGameRef()?.startGame()) {
+      if (getIsOnline()) return;
+      resetAIController();
+      startGame();
+      campaignCtrl.updateHud();
+    }
+
     const keyboard = createKeyboardInput(
       () => {
-        if (!getBeysChosen()) return;
-        if (!startOverlay.classList.contains('hidden')) getGameRef()?.startGame();
+        if (!getBeysChosen() || startOverlay.classList.contains('hidden')) return;
+        startOfflineMatch();
       },
       () => {
         const gameRef = getGameRef();
-        if (gameRef?.state.gameFrozen) {
+        if (!gameRef?.state.gameFrozen) return;
+        if (getIsOnline() && onlineCtrl?.isAwaitingRoundReady()) return;
+        if (getIsOnline() && onlineCtrl?.isActive()) {
+          onlineCtrl.handleRestart();
+          return;
+        }
+        if (campaignCtrl.handlesRestart()) {
           campaignCtrl.handleRestart(gameRef.resetGame.bind(gameRef));
         }
       },
       (player, slot) => {
+        if (getIsOnline()) {
+          if (player === 1) getGameRef()?.triggerAbility('player', slot);
+          return;
+        }
         if (isVsCpu(getGameMode()) && player === 2) return;
         getGameRef()?.triggerAbility(player === 1 ? 'player' : 'ai', slot);
       },
       {
-        canRestart: () => Boolean(getGameRef()?.state.gameFrozen),
+        canRestart: () => {
+          const gameRef = getGameRef();
+          if (!gameRef?.state.gameFrozen) return false;
+          if (getIsOnline() && onlineCtrl?.isAwaitingRoundReady()) return false;
+          return true;
+        },
         canStart: () => getBeysChosen() && !startOverlay.classList.contains('hidden'),
+        resolveAbilityKey(code) {
+          if (!getIsOnline()) return undefined;
+          if (code === 'KeyQ') return { player: 1, slot: 'power' };
+          if (code === 'KeyE') return { player: 1, slot: 'special' };
+          return undefined;
+        },
       }
     );
 
+    const remote = createRemoteInput({
+      localSlot: getLocalSlot,
+      inputBuffer,
+      netClient,
+      isOnline: getIsOnline,
+    });
+
+    let pingTimer = 0;
+
+    const keyState = {
+      KeyW: false,
+      KeyA: false,
+      KeyS: false,
+      KeyD: false,
+    };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code in keyState) keyState[e.code] = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code in keyState) keyState[e.code] = false;
+    });
+
     return {
       clearKeys: keyboard.clearKeys,
+      queueAbility(slot) {
+        inputBuffer.queueAbility(slot);
+      },
       applySteering(state) {
+        if (getIsOnline()) {
+          const s = steerFromKeys(keyState, PC_STEER_MAP);
+          inputBuffer.setSteer(s.x, s.y);
+          remote.applySteering(state);
+          return;
+        }
         if (isVsCpu(getGameMode())) {
-          keyboard.applyPlayer2Steer(state.playerBody, state.playerSpin);
+          keyboard.applyPlayer1Steer(state.playerBody, state.playerSpin);
           applyAISteering(state.aiBody, state.playerBody, state.aiSpin, state.playerSpin);
           tickAIAbilities(state, (slot) => getGameRef().triggerAbility('ai', slot));
         } else {
@@ -84,13 +166,29 @@ createAppBootstrap({
           keyboard.applyPlayer2Steer(state.aiBody, state.aiSpin);
         }
       },
-      onStartClick(startGame) {
-        resetAIController();
-        startGame();
-        campaignCtrl.updateHud();
+      onNetFrame({ snapAge, dt, serverTick, interpDelay }) {
+        netDebug.update({ snapAge, serverTick, interpDelayTicks: interpDelay });
+        pingTimer += dt ?? 0;
+        if (pingTimer < 2) return;
+        pingTimer = 0;
+        if (!getIsOnline()) return;
+        netClient.ping().then((result) => {
+          if (!result) return;
+          netDebug.update({ pingMs: result.rtt });
+          getGameRef()?.setNetRtt?.(result.rtt);
+        });
       },
-      onMatchEnd: (result) => campaignCtrl.handleMatchEnd(result),
+      onStartClick(startGame) {
+        startOfflineMatch(startGame);
+      },
+      onMatchEnd: (result) => {
+        if (!getIsOnline()) campaignCtrl.handleMatchEnd(result);
+      },
       onRestart(resetGame) {
+        if (getIsOnline() && onlineCtrl?.isActive()) {
+          onlineCtrl.handleRestart();
+          return;
+        }
         if (campaignCtrl.handlesRestart()) {
           campaignCtrl.handleRestart(resetGame);
         } else {
@@ -98,7 +196,14 @@ createAppBootstrap({
           resetGame();
         }
       },
-      onChangeBey: openBeySelect,
+      onChangeBey: () => {
+        if (!getIsOnline()) openBeySelect();
+      },
+      isAwaitingRoundReady: () => onlineCtrl?.isAwaitingRoundReady() ?? false,
+      onRecalibrate() {
+        if (!getIsOnline()) return;
+        keyboard.clearKeys();
+      },
     };
   },
 });

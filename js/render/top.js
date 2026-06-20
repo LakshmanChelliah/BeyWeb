@@ -51,6 +51,26 @@ export function createFallbackTopMesh(color) {
 }
 
 export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onReady) {
+  function mountModel(modelHolder) {
+    parentGroup.clear();
+    parentGroup.add(modelHolder);
+    if (physicsBody) {
+      const radius = fitColliderToModel(physicsBody, modelHolder);
+      if (onReady) onReady(radius);
+    }
+  }
+
+  function mountFallback() {
+    const fallback = createFallbackTopMesh(fallbackColor);
+    centerModelOnAxis(fallback);
+    mountModel(fallback);
+  }
+
+  // Placeholder mesh so tops are visible while GLTF loads (or if url is missing).
+  mountFallback();
+
+  if (!url) return;
+
   gltfLoader.load(
     url,
     (gltf) => {
@@ -91,24 +111,11 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
       modelHolder.scale.setScalar(scale);
       centerModelOnAxis(modelHolder);
 
-      parentGroup.clear();
-      parentGroup.add(modelHolder);
-
-      if (physicsBody) {
-        const radius = fitColliderToModel(physicsBody, modelHolder);
-        if (onReady) onReady(radius);
-      }
+      mountModel(modelHolder);
     },
     undefined,
     () => {
-      const fallback = createFallbackTopMesh(fallbackColor);
-      centerModelOnAxis(fallback);
-      parentGroup.clear();
-      parentGroup.add(fallback);
-      if (physicsBody) {
-        const radius = fitColliderToModel(physicsBody, fallback);
-        if (onReady) onReady(radius);
-      }
+      mountFallback();
     }
   );
 }

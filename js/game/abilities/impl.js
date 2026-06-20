@@ -20,9 +20,14 @@
  */
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../../config.js';
-import { setBodyCollisions } from '../../physics/top.js';
-import { isAtPocketAngle } from '../../physics/arena.js';
+import { setBodyCollisions } from '../../physics/topPhysics.js';
+import {
+  nearestSolidWallAngle,
+  playableCenterRadius,
+  topOuterRadius,
+} from '../../physics/arenaGeometry.js';
 import { clamp01 } from '../../utils/math.js';
+import { matchRandom } from '../../utils/seededRng.js';
 
 /** Special-move logo flash and windup are 50% longer than base ability.windup values. */
 export const SPECIAL_WINDUP_MULT = 1.5;
@@ -206,34 +211,11 @@ function restoreDynamicBody(body) {
   body.velocity.set(0, 0, 0);
 }
 
-function isPocketAngle(angle) {
-  return isAtPocketAngle(angle, 1.15);
-}
-
 /** Nearest solid wall point along the rim (avoids KO pockets). */
 function pickWallTarget(body) {
-  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-  const maxR = CONFIG.WALL_RADIUS - r - 0.04;
-  let angle = Math.atan2(body.position.z, body.position.x);
-  if (isPocketAngle(angle)) {
-    let best = angle;
-    let bestDist = Infinity;
-    for (let i = 0; i < CONFIG.POCKET_ANGLES.length; i++) {
-      const pocketStart = CONFIG.POCKET_ANGLES[i];
-      const pocketEnd = CONFIG.POCKET_ANGLES[(i + 1) % CONFIG.POCKET_ANGLES.length];
-      let wallStart = pocketStart + CONFIG.POCKET_HALF_WIDTH;
-      let wallEnd = pocketEnd - CONFIG.POCKET_HALF_WIDTH;
-      if (wallEnd < wallStart) wallEnd += Math.PI * 2;
-      const mid = (wallStart + wallEnd) * 0.5;
-      let delta = Math.abs(angle - mid);
-      if (delta > Math.PI) delta = 2 * Math.PI - delta;
-      if (delta < bestDist) {
-        bestDist = delta;
-        best = mid;
-      }
-    }
-    angle = best;
-  }
+  const r = topOuterRadius(body);
+  const maxR = playableCenterRadius(r, 'ability');
+  const angle = nearestSolidWallAngle(Math.atan2(body.position.z, body.position.x));
   return {
     x: Math.cos(angle) * maxR,
     z: Math.sin(angle) * maxR,
@@ -267,8 +249,8 @@ function initBullDashTarget(body, opp) {
   body.userData.bullCoastNx = nx;
   body.userData.bullCoastNz = nz;
 
-  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-  const maxR = CONFIG.WALL_RADIUS - r - 0.04;
+  const r = topOuterRadius(body);
+  const maxR = playableCenterRadius(r, 'ability');
   const angle = Math.atan2(nz, nx);
   body.userData.bullCoastTargetX = Math.cos(angle) * maxR;
   body.userData.bullCoastTargetZ = Math.sin(angle) * maxR;
@@ -354,15 +336,16 @@ function applyPhysicsKnockback(body, nx, nz, distance) {
   body.velocity.z += nz * speed;
 }
 
-function pickLightningSpots(count) {
+function pickLightningSpots(count, state) {
+  const rnd = () => matchRandom(state);
   const spots = [];
   const maxR = CONFIG.WALL_RADIUS - 2.8;
   const minDist = LDRAGO_LIGHTNING_RADIUS * 2.1;
   let attempts = 0;
   while (spots.length < count && attempts < 100) {
     attempts += 1;
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.sqrt(Math.random()) * maxR * 0.88;
+    const angle = rnd() * Math.PI * 2;
+    const r = Math.sqrt(rnd()) * maxR * 0.88;
     const x = Math.cos(angle) * r;
     const z = Math.sin(angle) * r;
     const tooClose = spots.some((s) => {
@@ -374,8 +357,8 @@ function pickLightningSpots(count) {
     spots.push({ x, z, flashT: 0 });
   }
   while (spots.length < count) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.sqrt(Math.random()) * maxR * 0.88;
+    const angle = rnd() * Math.PI * 2;
+    const r = Math.sqrt(rnd()) * maxR * 0.88;
     spots.push({ x: Math.cos(angle) * r, z: Math.sin(angle) * r, flashT: 0 });
   }
   return spots;
@@ -413,7 +396,7 @@ function tickLdragoSupremeFlightLightning(state, body, dt) {
   const strikeStart = chargeStart + LDRAGO_LIGHTNING_CHARGE_DUR;
 
   if (ft >= chargeStart && !body.userData.ldragoLightningSpots) {
-    body.userData.ldragoLightningSpots = pickLightningSpots(LDRAGO_LIGHTNING_COUNT);
+    body.userData.ldragoLightningSpots = pickLightningSpots(LDRAGO_LIGHTNING_COUNT, state);
     body.userData.ldragoLightningFired = 0;
   }
 
@@ -1656,7 +1639,12 @@ export function tickAbilityVisuals(state, dt) {
 
     if (!slot.active) continue;
 
-    const phase = body.userData.starPhase ?? 'dash';
+    let phase = body.userData.starPhase ?? 'dash';
+    // Windup is slot-timer only; once active, always run the dash phase machine.
+    if (phase === 'windup') {
+      phase = 'dash';
+      body.userData.starPhase = 'dash';
+    }
     body.userData.starPhaseT = (body.userData.starPhaseT ?? 0) + dt;
     body.userData.flightSquash = body.userData.flightSquash ?? 1;
 
@@ -1880,6 +1868,9 @@ export function tickLeoneAbilityVisuals(state, dt) {
 
     // --- Wide Ball Anchor (power) ---
     const pwSlot = runtime.power;
+    if (pwSlot?.ability?.id === 'leone_wide_ball') {
+      body.userData.anchoring = !!(pwSlot.active);
+    }
     if (pwSlot?.active && pwSlot.ability.id === 'leone_wide_ball') {
       const t = body.userData.leoneAnchorT ?? 0;
       body.userData.leoneAnchorT = t + dt;
@@ -1906,6 +1897,9 @@ export function tickLeoneAbilityVisuals(state, dt) {
 
     const inWindup = spSlot.windupRemaining > 0;
     const inActive = spSlot.active;
+    // Mirror flags for VFX renderers (online clients only receive ability slots, not onActivate flags).
+    body.userData.lionWallWindup = inWindup;
+    body.userData.lionWall = inActive;
     if (!inWindup && !inActive) continue;
 
     if (inWindup) {
@@ -1958,6 +1952,9 @@ export function tickBullAbilityVisuals(state, dt) {
     if (!runtime) continue;
 
     const pwSlot = runtime.power;
+    if (pwSlot?.ability?.id === 'bull_maximum_stampede') {
+      body.userData.stampeding = !!pwSlot.active;
+    }
     if (pwSlot?.active && pwSlot.ability.id === 'bull_maximum_stampede') {
       const t = body.userData.stampedeT ?? 0;
       body.userData.stampedeT = t + dt;
@@ -2042,7 +2039,6 @@ export function tickBullAbilityVisuals(state, dt) {
  */
 export function tickLibraAbilityVisuals(state, dt) {
   if (!state.abilities) return;
-  stepLibraBusterChannel(state, dt);
   for (const side of ['player', 'ai']) {
     const body = side === 'player' ? state.playerBody : state.aiBody;
     if (!body) continue;
@@ -2051,6 +2047,7 @@ export function tickLibraAbilityVisuals(state, dt) {
 
     const pwSlot = runtime.power;
     if (pwSlot?.active && pwSlot.ability.id === 'libra_sonic_shield') {
+      body.userData.sonicShield = true;
       const t = body.userData.sonicShieldT ?? 0;
       body.userData.sonicShieldT = t + dt;
       const pulse = 0.5 + 0.5 * Math.sin(t * 5.2);
@@ -2070,6 +2067,9 @@ export function tickLibraAbilityVisuals(state, dt) {
     const inWindup = spSlot.windupRemaining > 0 || body.userData.sonicBusterWindup;
     const inActive = spSlot.active;
     if (!inWindup && !inActive) continue;
+
+    body.userData.sonicBusterWindup = inWindup;
+    body.userData.sonicBuster = inActive;
 
     const vt = (body.userData.sonicBusterVibrateT ?? 0) + dt;
     body.userData.sonicBusterVibrateT = vt;
@@ -2101,6 +2101,9 @@ export function tickLdragoAbilityVisuals(state, dt) {
 
     // --- Spin Steal (power) ---
     const pwSlot = runtime.power;
+    if (pwSlot?.ability?.id === 'ldrago_spin_steal') {
+      body.userData.spinStealing = !!pwSlot.active;
+    }
     if (pwSlot?.active && pwSlot.ability.id === 'ldrago_spin_steal') {
       body.userData.spinStealT = (body.userData.spinStealT ?? 0) + dt;
       body.userData.flightRoll = Math.sin(body.userData.spinStealT * 4.5) * 0.05;
@@ -2121,6 +2124,13 @@ export function tickLdragoAbilityVisuals(state, dt) {
 
     const inWindup = spSlot.windupRemaining > 0;
     const inActive = spSlot.active;
+    body.userData.ldragoFlightWindup = inWindup;
+    if (inActive) {
+      body.userData.airborne = true;
+      body.userData.invulnerable = true;
+    } else if (!inWindup) {
+      body.userData.ldragoFlightWindup = false;
+    }
     if (!inWindup && !inActive && !body.userData.ldragoFlightWindup) continue;
 
     if (inWindup || body.userData.ldragoFlightWindup) {

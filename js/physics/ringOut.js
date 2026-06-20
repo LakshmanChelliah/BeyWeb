@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { setBodyCollisions } from './top.js';
+import { setBodyCollisions } from './topPhysics.js';
 
 /**
  * Starts the ring-out slide: preserve exit momentum, nudge outward if slow.

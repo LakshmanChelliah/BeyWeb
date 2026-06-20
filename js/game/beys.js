@@ -36,8 +36,8 @@ export const BEYS = Object.freeze([
     def: 28,
     sta: 22,
     color: '#3b82f6',
-    model: 'storm_pegasus.glb',
-    logo: 'pegasusLogo.png',
+    model: '/storm_pegasus.glb',
+    logo: '/pegasusLogo.png',
     gimmicks: {
       power: 'pegasus_speed_boost',
       special: 'pegasus_star_blast',
@@ -57,8 +57,8 @@ export const BEYS = Object.freeze([
     def: 32,
     sta: 52,
     color: '#ef4444',
-    model: 'meteo_ldrago.glb',
-    logo: 'updatedLdragoLogo.png',
+    model: '/meteo_ldrago.glb',
+    logo: '/updatedLdragoLogo.png',
     gimmicks: {
       power: 'ldrago_spin_steal',
       special: 'ldrago_supreme_flight',
@@ -79,8 +79,8 @@ export const BEYS = Object.freeze([
     def: 91,
     sta: 46,
     color: '#22c55e',
-    model: 'rock_leone.glb',
-    logo: 'rockleonelogandFacebolt.png',
+    model: '/rock_leone.glb',
+    logo: '/rockleonelogandFacebolt.png',
     gimmicks: {
       power: 'leone_wide_ball',
       special: 'leone_lion_wall',
@@ -99,8 +99,8 @@ export const BEYS = Object.freeze([
     def: 28,
     sta: 88,
     color: '#84cc16',
-    model: 'flame_libra.glb',
-    logo: 'flame_libralogo.png',
+    model: '/flame_libra.glb',
+    logo: '/flame_libralogo.png',
     gimmicks: {
       power: 'libra_sonic_shield',
       special: 'libra_sonic_buster',
@@ -117,8 +117,8 @@ export const BEYS = Object.freeze([
     def: null,
     sta: null,
     color: '#4b5563',
-    model: 'flame_sagittario.glb',
-    available: false,
+    model: '/flame_sagittario.glb',
+    available: true,
   },
   {
     id: 'eagle',
@@ -129,8 +129,8 @@ export const BEYS = Object.freeze([
     def: null,
     sta: null,
     color: '#4b5563',
-    model: 'earth_eagle.glb',
-    available: false,
+    model: '/earth_eagle.glb',
+    available: true,
   },
   {
     id: 'bull',
@@ -144,8 +144,8 @@ export const BEYS = Object.freeze([
     def: 38,
     sta: 34,
     color: '#dc2626',
-    model: 'dark_bull.glb',
-    logo: 'darkbull_logo.png',
+    model: '/dark_bull.glb',
+    logo: '/darkbull_logo.png',
     gimmicks: {
       power: 'bull_maximum_stampede',
       special: 'bull_red_horn_uppercut',
@@ -157,6 +157,11 @@ export const BEYS = Object.freeze([
 
 export function getBeyById(id) {
   return BEYS.find((b) => b.id === id) || null;
+}
+
+/** Resolve roster entry; falls back when id is missing or unknown. */
+export function getBeyOrDefault(id, fallbackId = 'pegasus') {
+  return getBeyById(id) ?? getBeyById(fallbackId) ?? BEYS[0];
 }
 
 export function isBeyPlayable(bey) {

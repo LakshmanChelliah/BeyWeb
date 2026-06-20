@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { innerRimContact, topOuterRadius } from './arenaGeometry.js';
 import { isBodyInSpecialMove } from '../game/abilities.js';
 
 const DEFAULT_COLOR = 0xffffff;
@@ -24,19 +25,9 @@ export function sparkSpeedFromWall(impactSpeed, special) {
   return Math.max(impactSpeed, floor);
 }
 
-/** Rim contact point + outward normal for wall sparks. */
-export function rimSparkContact(body, nx, nz) {
-  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-  const dist = Math.hypot(body.position.x, body.position.z) || 1;
-  const radialX = body.position.x / dist;
-  const radialZ = body.position.z / dist;
-  const rimDist = CONFIG.WALL_RADIUS - r * 0.2;
-  return {
-    x: radialX * rimDist,
-    z: radialZ * rimDist,
-    nx: nx ?? radialX,
-    nz: nz ?? radialZ,
-  };
+/** Rim contact point + inward normal for wall sparks (arena side of the wall). */
+export function rimSparkContact(body) {
+  return innerRimContact(body.position.x, body.position.z, topOuterRadius(body));
 }
 
 /** Rim point on the face of `body` that touches the other bey. */
@@ -81,7 +72,7 @@ export function buildClashSparkEvents(bodyA, bodyB, nx, nz, closingSpeed, specia
 
 export function buildWallSparkEvent(body, impactSpeed, nx, nz, state, sustained = false) {
   const special = isBodyInSpecialMove(body, state);
-  const contact = rimSparkContact(body, nx, nz);
+  const contact = rimSparkContact(body);
   return {
     x: contact.x,
     z: contact.z,

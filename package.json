@@ -9,18 +9,40 @@
     "color-bull": "node scripts/color-dark-bull.mjs",
     "build-bull-logo": "node scripts/build-darkbull-logo.mjs",
     "recolor-leone": "node scripts/recolor-leone-top.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:snapshot": "node scripts/test-snapshot-roundtrip.mjs",
+    "test:server-tick": "node scripts/test-server-tick.mjs",
+    "test:ws-smoke": "node scripts/test-ws-smoke.mjs",
+    "test:ready-gate": "node scripts/test-ready-gate.mjs",
+    "test:next-round": "node scripts/test-next-round-flow.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:ci": "npm test && playwright test",
+    "test:all": "npm run test:ci",
+    "start": "node server/index.js",
+    "dev:server": "node server/index.js",
+    "dev:static": "npx serve . -p 3000",
+    "dev:online": "npx concurrently \"npm run dev:server\" \"npm run dev:static\"",
+    "test": "npm run test:snapshot && npm run test:server-tick && npm run test:ws-smoke && npm run test:ready-gate && npm run test:next-round"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@gltf-transform/core": "^4.4.0",
     "@gltf-transform/extensions": "^4.4.0",
     "@gltf-transform/functions": "^4.4.0",
+    "cannon-es": "^0.20.0",
+    "concurrently": "^9.1.2",
     "jpeg-js": "^0.4.4",
     "meshoptimizer": "^1.1.1",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0"
   }
 }

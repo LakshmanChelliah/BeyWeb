@@ -9,18 +9,12 @@ import {
   stabilizeTop,
   resetTopWobble,
   syncTopVisual,
-  clampLaunchSpeed,
-  pinTopToFloor,
-  settleSleepingTop,
   updateTopCollisions,
   beginLaunchDrop,
-  stepLaunchDrop,
-  applyCenterPull,
-  resolveWallClipping,
+  stepSleepOutTimers,
 } from '../physics/top.js';
 import {
   beginRingOut,
-  stepRingOutBodies,
   isRingOutCinematicDone,
   clearRingOut,
 } from '../physics/ringOut.js';
@@ -29,11 +23,10 @@ import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera, resetMobileCameraFraming } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
 import { createTopGroups, loadTopModel, setTopEmissive } from '../render/top.js';
-import { beyColorHex } from './beys.js';
+import { beyColorHex, getBeyOrDefault } from './beys.js';
 import {
   createAbilityRuntime,
   triggerAbility as triggerAbilityCore,
-  stepAbilities,
   tickAbilityTimers,
   tickAbilityVisuals,
   tickLeoneAbilityVisuals,
@@ -47,7 +40,9 @@ import {
   cancelAbilitiesOnSpinStop,
   isLibraBusterChannelingBody,
   SPECIAL_LOGO_FLASH_DUR,
+  ABILITY_REGISTRY,
 } from './abilities.js';
+import { stepSimulation } from './simulation.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
 import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
@@ -55,11 +50,13 @@ import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
 import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
 import { createBullAbilityVfx } from '../render/bullAbilityVfx.js';
 import { createCollisionSparksVfx } from '../render/collisionSparksVfx.js';
+import { applySnapshotMeta } from '../net/snapshot.js';
+import { createInterpolator } from '../net/interpolation.js';
 
 /**
  * Boots the shared game engine for PC (2-player) or mobile (gyro + AI).
  */
-export function createGame({ mode, canvas, ui, input, isVsCpu }) {
+export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLocalSlot }) {
   const state = createGameState();
   const { renderer, scene, camera } = createScene(canvas);
   const { world, topMaterial, bowlMaterial, wallMaterial } = createPhysicsWorld();
@@ -174,20 +171,135 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   };
 
   const clock = new THREE.Clock();
+  const netInterpolator = createInterpolator();
+  let lastSnapAt = 0;
+  let lastServerTick = 0;
+
+  function onlineActive() {
+    return isOnline?.() ?? false;
+  }
+
+  function localSlot() {
+    return getLocalSlot?.() ?? 0;
+  }
+
+  /** Map HUD side (you/opponent) to sim body side (player=slot0, ai=slot1). */
+  function hudToSimSide(hudSide) {
+    if (!onlineActive() || localSlot() === 0) return hudSide;
+    return hudSide === 'player' ? 'ai' : 'player';
+  }
+
+  function simBody(simSide) {
+    return simSide === 'player' ? state.playerBody : state.aiBody;
+  }
+
+  function localYouBey() {
+    return localSlot() === 1 ? state.aiBey : state.playerBey;
+  }
+
+  function localOppBey() {
+    return localSlot() === 1 ? state.playerBey : state.aiBey;
+  }
+
+  function handleNetEvents(events) {
+    for (const ev of events ?? []) {
+      if (ev.type === 'ability_trigger') {
+        const isYou = ev.side === localSlot();
+        const bey = isYou ? localYouBey() : localOppBey();
+        const ability = ABILITY_REGISTRY[ev.abilityId];
+        if (ev.slot === 'special') {
+          playSpecialFlash(bey, ability?.glow || ev.glow);
+        }
+      }
+      if (ev.type === 'collision_spark') {
+        collisionSparksVfx.spawn(ev);
+      }
+    }
+  }
+
+  function applyNetSnapshot(msg) {
+    if (onlineActive() && input.isAwaitingRoundReady?.()) return;
+    if (onlineActive() && !state.gameRunning && state.gameFrozen) return;
+    if (msg.tick != null && msg.tick <= lastServerTick) return;
+    if (msg.tick != null) lastServerTick = msg.tick;
+
+    lastSnapAt = performance.now();
+    netInterpolator.pushSnapshot(msg);
+    applySnapshotMeta(state, msg);
+    handleNetEvents(msg.events);
+    updateHud();
+    updateAbilityHud();
+  }
+
+  function startOnlineRound() {
+    if (!state.playerBody) spawnTops();
+    netInterpolator.reset();
+    lastServerTick = 0;
+    lastSnapAt = 0;
+    state.gameFrozen = false;
+    state.pendingKo = null;
+    dom.startOverlay.classList.add('hidden');
+    dom.hud.classList.add('visible');
+    dom.controlsHint?.classList.add('visible');
+    dom.gameoverOverlay.classList.remove('visible');
+    for (const container of Object.values(dom.abilityBars)) {
+      container?.classList.add('visible');
+    }
+    state.gameRunning = true;
+    state.gameFrozen = false;
+    clock.getDelta();
+  }
+
+  function tearDownOnlineMatch() {
+    resetStarBlastCamera();
+    resetMobileCameraFraming();
+    resetAllAbilityVfx();
+    netInterpolator.reset();
+    input.clearKeys?.();
+    state.pendingKo = null;
+    state.launchGrace = 0;
+    state.gameRunning = false;
+    state.gameFrozen = false;
+    if (state.playerBody) {
+      world.removeBody(state.playerBody);
+      state.playerBody = null;
+    }
+    if (state.aiBody) {
+      world.removeBody(state.aiBody);
+      state.aiBody = null;
+    }
+    state.abilities = null;
+    for (const container of Object.values(dom.abilityBars)) {
+      container?.classList.remove('visible');
+      if (container) container.innerHTML = '';
+    }
+    dom.hud.classList.remove('visible');
+    dom.controlsHint?.classList.remove('visible');
+    dom.gameoverOverlay.classList.remove('visible');
+    dom.specialFlash?.classList.remove('flash-play');
+  }
+
+  function endOnlineRound() {
+    state.gameFrozen = true;
+    state.gameRunning = false;
+    freezeBodies();
+    dom.gameoverOverlay.classList.add('visible');
+  }
 
   function abilityKeyLabels() {
     if (mode !== 'pc') return { player: {}, ai: {} };
     if (isVsCpu?.()) return { player: { power: 'Q', special: 'E' }, ai: {} };
-    return { player: { power: 'Q', special: 'E' }, ai: { power: '.', special: '/' } };
+    return { player: { power: 'Q', special: 'E' }, ai: { power: ',', special: '.' } };
   }
   const abilityButtons = { player: [], ai: [] };
 
-  function buildAbilityButtons(side) {
-    abilityButtons[side] = [];
-    const container = dom.abilityBars[side];
+  function buildAbilityButtons(hudSide) {
+    abilityButtons[hudSide] = [];
+    const simSide = hudToSimSide(hudSide);
+    const container = dom.abilityBars[hudSide];
     if (!container) return;
     container.innerHTML = '';
-    const runtime = state.abilities?.[side];
+    const runtime = state.abilities?.[simSide];
     if (!runtime) {
       container.classList.remove('visible');
       return;
@@ -200,40 +312,44 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       btn.className = `ability-btn slot-${slotName}`;
       btn.type = 'button';
       btn.style.setProperty('--ability-glow', ability.glow || '#4f8cff');
-      const keyLabel = abilityKeyLabels()[side]?.[slotName];
+      const keyLabel = abilityKeyLabels()[hudSide]?.[slotName];
       btn.innerHTML =
         `<span class="ability-cd"></span>` +
         `<span class="ability-icon">${ability.icon || ''}</span>` +
         `<span class="ability-name">${ability.name}</span>` +
         (keyLabel ? `<span class="ability-key">${keyLabel}</span>` : '');
-      btn.addEventListener('click', () => triggerAbility(side, slotName));
+      btn.setAttribute('aria-label', `${ability.name}${keyLabel ? ` (${keyLabel})` : ''}`);
+      btn.addEventListener('click', () => triggerAbility(hudSide, slotName));
       container.appendChild(btn);
-      abilityButtons[side].push({ btn, slot, cdEl: btn.querySelector('.ability-cd') });
+      abilityButtons[hudSide].push({ btn, slot, cdEl: btn.querySelector('.ability-cd') });
     }
-    container.classList.toggle('visible', abilityButtons[side].length > 0);
+    container.classList.toggle('visible', abilityButtons[hudSide].length > 0);
   }
 
   function updateAbilityHud() {
-    for (const side of ['player', 'ai']) {
-      for (const { btn, slot, cdEl } of abilityButtons[side]) {
+    for (const hudSide of ['player', 'ai']) {
+      for (const { btn, slot, cdEl } of abilityButtons[hudSide]) {
         const ability = slot.ability;
         const total = slot.cooldownTotal || ability.cooldown || 0;
         const ratio = total ? slot.cooldownRemaining / total : 0;
         cdEl.style.transform = `scaleY(${Math.max(0, Math.min(1, ratio))})`;
+        const busy = slot.cooldownRemaining > 0 || slot.windupRemaining > 0 || slot.active;
         btn.classList.toggle('cooling', slot.cooldownRemaining > 0);
         btn.classList.toggle('active', slot.active || slot.windupRemaining > 0);
+        btn.disabled = busy;
+        btn.setAttribute('aria-disabled', busy ? 'true' : 'false');
       }
     }
   }
 
-  function abilityGlow(side) {
-    const runtime = state.abilities?.[side];
+  function abilityGlow(simSide) {
+    const runtime = state.abilities?.[simSide];
     if (!runtime) return null;
+    const body = simBody(simSide);
     const sp = runtime.special;
     if (sp && (sp.active || sp.windupRemaining > 0)) {
       if (sp.ability.id === 'pegasus_star_blast') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
-        if (!shouldStarBlastGlow(body)) return null;
+        if (!shouldStarBlastGlow(body) && !(sp.windupRemaining > 0 || sp.active)) return null;
         if (body?.userData.starImpactFlash) {
           return { color: sp.ability.glow, intensity: 2.4 };
         }
@@ -241,7 +357,6 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         return { color: sp.ability.glow, intensity: pulse * 1.45 };
       }
       if (sp.ability.id === 'leone_lion_wall') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         const burst = body?.userData.lionWallBurstT ?? 0;
         const pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.009);
         const base = pulse * 0.55;
@@ -250,7 +365,6 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         return { color: '#c4bfb6', intensity };
       }
       if (sp.ability.id === 'ldrago_supreme_flight') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         const repulse = body?.userData.flightRepulseT ?? 0;
         const launch = body?.userData.ldragoFlightLaunchT ?? 0;
         const windup = body?.userData.ldragoFlightWindup;
@@ -270,14 +384,12 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         return { color: sp.ability.glow, intensity };
       }
       if (sp.ability.id === 'libra_sonic_buster') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         const channeling = body?.userData.sonicBusterWindup || body?.userData.sonicBuster;
         const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.02);
         const base = channeling ? pulse * 1.45 : pulse * 0.65;
         return { color: sp.ability.glow, intensity: base };
       }
       if (sp.ability.id === 'bull_red_horn_uppercut') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         if (body?.userData.bullImpactFlash) {
           return { color: '#ef4444', intensity: 2.5 };
         }
@@ -300,7 +412,6 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         return { color: pw.ability.glow, intensity: pulse * 1.15 };
       }
       if (pw.ability.id === 'ldrago_spin_steal') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         const burst = body?.userData.spinStealBurstT ?? 0;
         const pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.012);
         const base = pulse * 1.05;
@@ -308,7 +419,6 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         return { color: pw.ability.glow, intensity };
       }
       if (pw.ability.id === 'libra_sonic_shield') {
-        const body = side === 'player' ? state.playerBody : state.aiBody;
         const burst = body?.userData.sonicShieldBurstT ?? 0;
         const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.01);
         const base = pulse * 1.1;
@@ -325,10 +435,11 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function updateAbilityVisuals() {
-    const pg = abilityGlow('player');
-    setTopEmissive(playerGroup, pg ? pg.color : 0x000000, pg ? pg.intensity : 0);
-    const ag = abilityGlow('ai');
-    setTopEmissive(aiGroup, ag ? ag.color : 0x000000, ag ? ag.intensity : 0);
+    // Glow follows sim bodies (playerGroup=slot0, aiGroup=slot1), not HUD labels.
+    const pGlow = abilityGlow('player');
+    setTopEmissive(playerGroup, pGlow ? pGlow.color : 0x000000, pGlow ? pGlow.intensity : 0);
+    const aGlow = abilityGlow('ai');
+    setTopEmissive(aiGroup, aGlow ? aGlow.color : 0x000000, aGlow ? aGlow.intensity : 0);
   }
 
   function playSpecialFlash(bey, glowColor) {
@@ -357,7 +468,18 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function triggerAbility(side, slot) {
-    if (!state.gameRunning || state.gameFrozen || state.launchGrace > 0 || state.pendingKo) return;
+    if (!state.gameRunning || state.gameFrozen || state.pendingKo) return;
+    const simSide = hudToSimSide(side);
+    const abilitySlot = state.abilities?.[simSide]?.[slot];
+    if (abilitySlot?.cooldownRemaining > 0 || abilitySlot?.windupRemaining > 0 || abilitySlot?.active) {
+      return;
+    }
+    if (onlineActive()) {
+      if (side !== 'player') return;
+      input.queueAbility?.(slot);
+      return;
+    }
+    if (state.launchGrace > 0) return;
     const ability = triggerAbilityCore(state, side, slot);
     if (ability && slot === 'special') {
       const bey = side === 'player' ? state.playerBey : state.aiBey;
@@ -366,8 +488,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function updateHud() {
-    const pPct = Math.round(state.playerSpin * 100);
-    const aPct = Math.round(state.aiSpin * 100);
+    const youSpin = onlineActive() && localSlot() === 1 ? state.aiSpin : state.playerSpin;
+    const rivalSpin = onlineActive() && localSlot() === 1 ? state.playerSpin : state.aiSpin;
+    const pPct = Math.round(youSpin * 100);
+    const aPct = Math.round(rivalSpin * 100);
     dom.playerSpinEl.textContent = `${pPct}%`;
     dom.aiSpinEl.textContent = `${aPct}%`;
     dom.playerBar.style.width = `${pPct}%`;
@@ -382,8 +506,13 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       img.alt = bey.name || '';
       img.style.setProperty('--avatar-accent', bey.color || '#4f8cff');
     };
-    apply(dom.playerAvatar, state.playerBey);
-    apply(dom.aiAvatar, state.aiBey);
+    if (onlineActive()) {
+      apply(dom.playerAvatar, localYouBey());
+      apply(dom.aiAvatar, localOppBey());
+    } else {
+      apply(dom.playerAvatar, state.playerBey);
+      apply(dom.aiAvatar, state.aiBey);
+    }
   }
 
   function freezeBodies() {
@@ -450,27 +579,27 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
       2
     );
 
-    // Stamp bey stats onto each body so physics handlers can read them.
-    const playerBey = state.playerBey;
-    const aiBey = state.aiBey;
-    state.playerBody.userData.beyStats = {
-      id: playerBey.id,
-      atk: playerBey.atk ?? 50,
-      move: playerBey.move ?? playerBey.atk ?? 50,
-      def: playerBey.def ?? 50,
-      sta: playerBey.sta ?? 50,
-    };
-    state.playerBody.userData.beyColor = beyColorHex(playerBey.color);
-    state.aiBody.userData.beyStats = {
-      id: aiBey.id,
-      atk: aiBey.atk ?? 50,
-      move: aiBey.move ?? aiBey.atk ?? 50,
-      def: aiBey.def ?? 50,
-      sta: aiBey.sta ?? 50,
-    };
-    state.aiBody.userData.beyColor = beyColorHex(aiBey.color);
+    const playerBey = getBeyOrDefault(state.playerBey?.id, 'pegasus');
+    const aiBey = getBeyOrDefault(state.aiBey?.id, 'ldrago');
+    state.playerBey = playerBey;
+    state.aiBey = aiBey;
 
-    // Tag sides and build the per-bey ability runtimes + on-screen buttons.
+    const stampBody = (body, bey) => {
+      body.userData.beyStats = {
+        id: bey.id,
+        atk: bey.atk ?? 50,
+        move: bey.move ?? bey.atk ?? 50,
+        def: bey.def ?? 50,
+        sta: bey.sta ?? 50,
+      };
+      body.userData.beyColor = beyColorHex(bey.color);
+    };
+
+    // Stamp bey stats onto sim bodies (player=slot0, ai=slot1).
+    stampBody(state.playerBody, playerBey);
+    stampBody(state.aiBody, aiBey);
+
+    // Tag sides and build ability runtimes aligned to sim bodies.
     state.playerBody.userData.side = 'player';
     state.aiBody.userData.side = 'ai';
     resetTopWobble(state.playerBody);
@@ -492,6 +621,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     updateHud();
     updateAvatars();
 
+    // Always bind visuals to sim groups/bodies (player=slot0, ai=slot1).
     loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
     loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
   }
@@ -503,16 +633,21 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     dom.gameoverOverlay.classList.remove('visible');
     dom.hud.classList.remove('visible');
     dom.controlsHint?.classList.remove('visible');
+    for (const container of Object.values(dom.abilityBars)) {
+      container?.classList.remove('visible');
+    }
     dom.startOverlay.classList.remove('hidden');
     dom.btnStart.disabled = false;
     input.clearKeys?.();
   }
 
   function resetGame() {
+    if (onlineActive()) return;
     state.gameFrozen = false;
     dom.gameoverOverlay.classList.remove('visible');
     input.clearKeys?.();
     spawnTops();
+    netInterpolator.reset();
     state.gameRunning = true;
     clock.getDelta();
   }
@@ -530,59 +665,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
   }
 
   function stepPhysics() {
-    stepRingOutBodies(state);
-
-    if (state.playerBody) {
-      if (!state.playerBody.userData.ringOut) {
-        settleSleepingTop(state.playerBody, state.playerSpin);
-      }
-      stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
-      pinTopToFloor(state.playerBody);
-    }
-    if (state.aiBody) {
-      if (!state.aiBody.userData.ringOut) {
-        settleSleepingTop(state.aiBody, state.aiSpin);
-      }
-      stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
-      pinTopToFloor(state.aiBody);
-    }
-
-    if (!state.pendingKo) {
-      input.applySteering?.(state);
-      applyCenterPull(state.playerBody, state.playerSpin);
-      applyCenterPull(state.aiBody, state.aiSpin);
-    }
-
-    world.step(CONFIG.FIXED_DT);
-
-    stepLaunchDrop(state.playerBody, state.launchGrace);
-    stepLaunchDrop(state.aiBody, state.launchGrace);
-
-    contacts.resolve(state, CONFIG.FIXED_DT);
-    contacts.resolveWallContacts(state, CONFIG.FIXED_DT);
-    contacts.resolveWallClipSpin(state, state.playerBody, state.aiBody);
-    resolveWallClipping(state.playerBody, state.aiBody, contacts.emitWallImpact);
-
-    // Run after physics so cinematic moves (Star Blast climb/dive) aren't
-    // overwritten by gravity or floor pinning in the same step.
-    stepAbilities(state, CONFIG.FIXED_DT);
-
-    if (state.playerBody) {
-      clampLaunchSpeed(state.playerBody, state.launchGrace);
-      stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
-      pinTopToFloor(state.playerBody);
-      if (!state.playerBody.userData.ringOut) {
-        settleSleepingTop(state.playerBody, state.playerSpin);
-      }
-    }
-    if (state.aiBody) {
-      clampLaunchSpeed(state.aiBody, state.launchGrace);
-      stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
-      pinTopToFloor(state.aiBody);
-      if (!state.aiBody.userData.ringOut) {
-        settleSleepingTop(state.aiBody, state.aiSpin);
-      }
-    }
+    stepSimulation({ state, world, contacts, input });
   }
 
   function gameLoop() {
@@ -590,6 +673,11 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
     const dt = Math.min(clock.getDelta(), 0.05);
 
     if (state.gameRunning && !state.gameFrozen) {
+      if (onlineActive()) {
+        input.applySteering?.(state);
+        updateTopCollisions(state);
+        netInterpolator.update(dt, state, localSlot());
+      } else {
       if (state.launchGrace > 0) {
         state.launchGrace = Math.max(0, state.launchGrace - dt);
       }
@@ -628,6 +716,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
             state.aiBey.sta ?? 50,
             aiSandMult
           );
+      stepSleepOutTimers(state.playerBody, state.playerSpin, dt);
+      stepSleepOutTimers(state.aiBody, state.aiSpin, dt);
       cancelAbilitiesOnSpinStop(state, dt);
       tickAbilityTimers(state, dt);
       syncSpecialFlashOverlay();
@@ -660,6 +750,19 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
           endGame(state.pendingKo);
         }
       }
+      } // end local physics
+
+      if (onlineActive()) {
+        syncSpecialFlashOverlay();
+        updateHud();
+        updateAbilityHud();
+        input.onNetFrame?.({
+          snapAge: lastSnapAt ? performance.now() - lastSnapAt : 0,
+          dt,
+          serverTick: lastServerTick,
+          interpDelay: netInterpolator.delayTicks,
+        });
+      }
     }
 
     updateAbilityVisuals();
@@ -671,7 +774,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         state.playerSpin,
         state.playerVisualYaw,
         dt,
-        1
+        1,
+        state
       );
     }
     if (state.aiBody) {
@@ -681,7 +785,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
         state.aiSpin,
         state.aiVisualYaw,
         dt,
-        -0.95
+        -0.95,
+        state
       );
     }
 
@@ -715,5 +820,22 @@ export function createGame({ mode, canvas, ui, input, isVsCpu }) {
 
   gameLoop();
 
-  return { state, startGame, resetGame, returnToMenu, spawnTops, triggerAbility, playerGroup, aiGroup };
+  return {
+    state,
+    startGame,
+    resetGame,
+    returnToMenu,
+    spawnTops,
+    triggerAbility,
+    applyNetSnapshot,
+    startOnlineRound,
+    endOnlineRound,
+    endOfflineMatch: endGame,
+    tearDownOnlineMatch,
+    setNetRtt(ms) {
+      netInterpolator.setRtt(ms);
+    },
+    playerGroup,
+    aiGroup,
+  };
 }

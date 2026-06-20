@@ -30,15 +30,17 @@ const COLORS = {
   energy: REFERENCE_ENERGY,
   energyDeep: REFERENCE_ENERGY_DEEP,
   navy: [0.08, 0.12, 0.38],
-  faceBoltBg: [0xf5 / 255, 0xc0 / 255, 0x18 / 255], // flameLibraReferenceLook.jpg
+  faceBoltBg: [0xf0 / 255, 0x8a / 255, 0x28 / 255], // orange facebolt only (rest unchanged)
   track: [0.15, 0.16, 0.18],
   tip: [0.90, 0.91, 0.93],
   white: [1, 1, 1],
 };
 
-// Facebolt hex ends ~r 0.26 on the baked mesh; energy ring starts outside that.
+// Energy ring inner edge on the wheel; facebolt hex extends further out on the top cap.
 const RING_INNER = 0.26;
 const RING_OUTER = 0.76;
+/** Full hex facebolt circumradius — top cap + sidewalls (corners sit past RING_INNER). */
+const FACE_BOLT_RADIUS = 0.345;
 
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
@@ -96,8 +98,15 @@ function prepareFaceLogo(src) {
     const b = src[i + 2];
     const a = src[i + 3];
     if (a < 10 || r + g + b < 48) continue;
-    // Yellow border in the PNG — keep the baked golden disc underneath.
-    if (r > 175 && g > 150 && b < 130) continue;
+    // Yellow/orange border in the PNG — bake as orange so the full hex reads solid.
+    if (r > 175 && g > 130 && b < 140) {
+      const o = COLORS.faceBoltBg.map((c) => Math.round(c * 255));
+      out[i] = o[0];
+      out[i + 1] = o[1];
+      out[i + 2] = o[2];
+      out[i + 3] = 255;
+      continue;
+    }
     out[i] = navy[0];
     out[i + 1] = navy[1];
     out[i + 2] = navy[2];
@@ -123,9 +132,19 @@ function resizeNearest(src, srcW, srcH, dstW, dstH) {
   return out;
 }
 
-// Top-down texture radius matches mesh UV: rim maps to r=1.
-function textureRadius(dx, dy, cx) {
-  return Math.min(1, hypot2(dx, dy) / cx * 2);
+/** True when (px, py) lies inside the flat-top hex facebolt disc. */
+function inFaceBoltDisc(px, py) {
+  const ax = Math.abs(px);
+  const ay = Math.abs(py);
+  const r = FACE_BOLT_RADIUS;
+  const edge = r * (Math.sqrt(3) / 2);
+  return ax <= edge && ay <= r && ax * Math.sqrt(3) + ay <= r * Math.sqrt(3);
+}
+
+function faceBoltMaskAt(dx, dy, cx) {
+  const px = dx / cx;
+  const py = dy / cx;
+  return inFaceBoltDisc(px, py);
 }
 
 /** Radial top-down texture: facebolt, chartreuse energy ring, Pegasus-gray wheel. */
@@ -137,13 +156,14 @@ function buildTopTexture() {
     for (let x = 0; x < TEX_SIZE; x++) {
       const dx = x - cx;
       const dy = y - cx;
-      const r = textureRadius(dx, dy, cx);
+      const r = Math.min(1, hypot2(dx, dy) / cx * 2);
       const ang = Math.atan2(dy, dx);
       const i = (y * TEX_SIZE + x) * 4;
+      const onFaceBolt = faceBoltMaskAt(dx, dy, cx);
 
       let rgb;
 
-      if (r < RING_INNER) {
+      if (onFaceBolt) {
         rgb = COLORS.faceBoltBg.map((c) => Math.round(c * 255));
       } else if (r < RING_OUTER) {
         // White here — vertex colors on the top cap supply the chartreuse ring.
@@ -172,9 +192,8 @@ function buildTopTexture() {
   }
 
   const faceImg = PNG.sync.read(readFileSync(FACE_PNG));
-  // Logo must fit inside the yellow facebolt disc (r < RING_INNER in texture space).
-  const faceRadiusPx = (RING_INNER / 2) * cx;
-  const faceSize = Math.round(faceRadiusPx * 2 * 0.88);
+  const faceRadiusPx = FACE_BOLT_RADIUS * cx;
+  const faceSize = Math.round(faceRadiusPx * 2 * 0.96);
   const face = resizeNearest(faceImg.data, faceImg.width, faceImg.height, faceSize, faceSize);
   const facePrepared = prepareFaceLogo(face);
   blit(data, TEX_SIZE, TEX_SIZE, facePrepared, faceSize, faceSize, Math.round(cx - faceSize / 2), Math.round(cx - faceSize / 2), true);
@@ -189,18 +208,22 @@ function isTopCap(nx, ny, nz) {
   return nz < -0.28;
 }
 
-function topCapPaint(rNorm) {
-  // White vertex × yellow texture = reference golden yellow on the bolt face.
-  if (rNorm < RING_INNER) return { rgb: COLORS.white, alpha: 1 };
+function topCapPaint(x, y, rMax) {
+  const px = x / rMax;
+  const py = y / rMax;
+  const rNorm = hypot2(px, py);
+  if (inFaceBoltDisc(px, py)) return { rgb: COLORS.white, alpha: 1 };
   if (rNorm < RING_OUTER) return { rgb: COLORS.energy, alpha: 1 };
   return { rgb: COLORS.white, alpha: 1 };
 }
 
-function sidePaint(h, r) {
+function sidePaint(h, r, x, y, rMax) {
+  const px = x / rMax;
+  const py = y / rMax;
   if (h < 0.14) return { rgb: COLORS.tip, alpha: 1 };
   if (h < 0.32) return { rgb: COLORS.track, alpha: 1 };
-  // Facebolt hex sidewalls — vertex color only (no top-down UV on sides).
-  if (r < RING_INNER && h >= 0.35) return { rgb: COLORS.faceBoltBg, alpha: 1 };
+  // Full hex facebolt sidewalls (vertex color — no top-down UV on sides).
+  if (inFaceBoltDisc(px, py) && h >= 0.28) return { rgb: COLORS.faceBoltBg, alpha: 1 };
   // Clear-wheel sidewalls
   if (r >= RING_INNER && r < RING_OUTER && h >= 0.10 && h < 0.58) {
     return { rgb: COLORS.energy, alpha: 1 };
@@ -214,9 +237,9 @@ function vertexPaint(x, y, z, nx, ny, nz, rMax, zMin, zMax) {
   const r = hypot2(x, y) / rMax;
 
   if (isTopCap(nx, ny, nz)) {
-    return topCapPaint(r);
+    return topCapPaint(x, y, rMax);
   }
-  return sidePaint(h, r);
+  return sidePaint(h, r, x, y, rMax);
 }
 
 function computeNormals(pos, indices) {

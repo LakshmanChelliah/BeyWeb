@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { WALL_SPARK_MAX_R } from '../physics/arenaGeometry.js';
 import { clamp01 } from '../utils/math.js';
 
 const POOL_SIZE = 128;
@@ -65,7 +66,7 @@ export function computeSparkBurst(speed, special, sustained = false) {
   };
 }
 
-function initParticle(p, burst, i, x, z, dir, tint) {
+function initParticle(p, burst, i, x, z, dir, tint, wallClamp = false) {
   const side = i % 2 === 0 ? 1 : -1;
   const spread = (Math.random() - 0.5) * burst.spread;
   const outX = dir.nx + dir.tx * spread * side;
@@ -79,6 +80,7 @@ function initParticle(p, burst, i, x, z, dir, tint) {
   p.vx = (outX / outLen) * spd;
   p.vz = (outZ / outLen) * spd;
   p.vy = (0.9 + Math.random() * 2.4 * burst.motionT) * burst.lift;
+  p.wallClamp = wallClamp;
 
   const jitter = (Math.random() - 0.5) * burst.jitter;
   p.mesh.position.set(x + jitter, SPARK_Y, z + jitter);
@@ -99,7 +101,7 @@ export function createCollisionSparksVfx(scene) {
     mesh.visible = false;
     mesh.renderOrder = 10;
     root.add(mesh);
-    pool.push({ mesh, active: false, life: 0, maxLife: 0, vx: 0, vz: 0, vy: 0 });
+    pool.push({ mesh, active: false, life: 0, maxLife: 0, vx: 0, vz: 0, vy: 0, wallClamp: false });
   }
 
   function acquire() {
@@ -113,6 +115,7 @@ export function createCollisionSparksVfx(scene) {
     for (const p of pool) {
       p.active = false;
       p.life = 0;
+      p.wallClamp = false;
       p.mesh.visible = false;
       p.mesh.material.opacity = 0;
     }
@@ -133,13 +136,14 @@ export function createCollisionSparksVfx(scene) {
   }) {
     const burst = computeSparkBurst(speed, special, sustained);
     burst.count = Math.max(3, Math.round(burst.count * countMult));
+    const isWall = kind === 'wall';
     const dir = normalize2D(nx, nz);
 
     for (let i = 0; i < burst.count; i++) {
       const p = acquire();
       if (!p) break;
-      const tint = kind === 'wall' ? colorA : i % 2 === 0 ? colorA : colorB;
-      initParticle(p, burst, i, x, z, dir, tint);
+      const tint = isWall ? colorA : i % 2 === 0 ? colorA : colorB;
+      initParticle(p, burst, i, x, z, dir, tint, isWall);
     }
   }
 
@@ -150,6 +154,7 @@ export function createCollisionSparksVfx(scene) {
       p.life -= dt;
       if (p.life <= 0) {
         p.active = false;
+        p.wallClamp = false;
         p.mesh.visible = false;
         p.mesh.material.opacity = 0;
         continue;
@@ -159,6 +164,23 @@ export function createCollisionSparksVfx(scene) {
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
+      if (p.wallClamp) {
+        const px = p.mesh.position.x;
+        const pz = p.mesh.position.z;
+        const r = Math.hypot(px, pz);
+        if (r > WALL_SPARK_MAX_R) {
+          const s = WALL_SPARK_MAX_R / r;
+          p.mesh.position.x = px * s;
+          p.mesh.position.z = pz * s;
+          const nx = px / r;
+          const nz = pz / r;
+          const vOut = p.vx * nx + p.vz * nz;
+          if (vOut > 0) {
+            p.vx -= vOut * nx;
+            p.vz -= vOut * nz;
+          }
+        }
+      }
       p.vy -= 6 * dt;
       p.vx *= 1 - 2.5 * dt;
       p.vz *= 1 - 2.5 * dt;

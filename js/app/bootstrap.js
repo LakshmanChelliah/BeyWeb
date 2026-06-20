@@ -4,7 +4,14 @@ import { createBeySelection } from '../ui/selection.js';
 import { createPlaySetup } from '../ui/playSetup.js';
 import { queryGameUi } from '../ui/domRefs.js';
 import { createCampaignController } from '../game/campaignController.js';
-import { GAME_MODES, isVsCpu, modeBlurb } from '../game/modes.js';
+import { createOnlineController } from '../game/onlineController.js';
+import { createOnlineLobby } from '../ui/onlineLobby.js';
+import { createOnlineSelection } from '../ui/onlineSelection.js';
+import { createNetClient } from '../net/client.js';
+import { createInputBuffer } from '../net/inputBuffer.js';
+import { createNetDebug } from '../net/debug.js';
+import { parseRoomFromUrl } from '../net/protocol.js';
+import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js';
 
 /**
  * Shared mobile/PC bootstrap: campaign, play setup, bey selection, and game wiring.
@@ -28,6 +35,16 @@ export function createAppBootstrap({
   let beysChosen = false;
   let gameRef = null;
   let selection = null;
+  let onlineFlowEl = null;
+  let onlineLobby = null;
+  let onlineStarted = false;
+
+  const netClient = createNetClient();
+  const inputBuffer = createInputBuffer();
+  const netDebug = createNetDebug();
+
+  const gameoverOverlay = document.getElementById('gameover-overlay');
+  const btnRecalibrate = document.getElementById('btn-recalibrate');
 
   const campaignCtrl = createCampaignController({
     campaignHud: document.getElementById('campaign-hud'),
@@ -39,6 +56,24 @@ export function createAppBootstrap({
     onOpponentChange(opp) {
       gameRef.state.aiBey = opp;
       selection?.setRivalPick(opp);
+    },
+  });
+
+  const onlineCtrl = createOnlineController({
+    campaignHud: document.getElementById('campaign-hud'),
+    gameoverTitle: document.getElementById('gameover-title'),
+    gameoverMsg: document.getElementById('gameover-msg'),
+    gameoverOverlay,
+    btnRestart: document.getElementById('btn-restart'),
+    btnRecalibrate,
+    netClient,
+    onRematchPicking() {
+      beginOnlineRematchSelection();
+    },
+    onMainMenu: openBeySelect,
+    onMatchStarting() {
+      selectOverlay.classList.add('hidden');
+      startOverlay.classList.add('hidden');
     },
   });
 
@@ -54,18 +89,146 @@ export function createAppBootstrap({
   }
 
   function applyModeUi() {
-    applyPlatformModeUi?.({ gameMode, isVsCpu: isVsCpu(gameMode) });
+    applyPlatformModeUi?.({ gameMode, isVsCpu: isVsCpu(gameMode), isOnline: isOnline(gameMode) });
     campaignCtrl.updateHud();
+    onlineCtrl.updateHud();
   }
 
-  function openBeySelect() {
-    campaignCtrl.resetCampaign();
-    resetAIController();
-    selection?.reset(getPlayers());
-    selection?.setRivalLabel(getRivalLabel());
-    gameRef.returnToMenu();
+  function ensureOnlineFlow() {
+    if (onlineFlowEl) return onlineFlowEl;
+    onlineFlowEl = document.createElement('div');
+    onlineFlowEl.id = 'online-flow';
+    onlineFlowEl.className = 'online-flow hidden';
+    selectOverlay.appendChild(onlineFlowEl);
+    return onlineFlowEl;
+  }
+
+  function showOnlineFlow(show) {
+    const mount = selectOverlay.querySelector('.select-mount');
+    const picks = selectOverlay.querySelector('.select-picks');
+    const flow = ensureOnlineFlow();
+    if (show) {
+      mount?.classList.add('hidden');
+      picks?.classList.add('hidden');
+      flow.classList.remove('hidden');
+    } else {
+      mount?.classList.remove('hidden');
+      picks?.classList.remove('hidden');
+      flow.classList.add('hidden');
+    }
+  }
+
+  function clearRoomFromUrl() {
+    if (!parseRoomFromUrl()) return;
+    const url = new URL(location.href);
+    url.searchParams.delete('room');
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function ensureRoomInUrl(roomId) {
+    if (!roomId) return;
+    const url = new URL(location.href);
+    url.searchParams.set('room', roomId);
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function startOnlineFlow({ asHost = false, joinRoomId = null } = {}) {
+    if (!asHost && joinRoomId && !parseRoomFromUrl()) {
+      ensureRoomInUrl(joinRoomId);
+    }
+    const joinFromUrl = !!parseRoomFromUrl();
+    const isGuest = !asHost && joinFromUrl;
+
+    if (onlineStarted && !asHost) return;
+
+    if (asHost) {
+      netClient.close();
+      onlineStarted = false;
+      if (joinFromUrl) clearRoomFromUrl();
+    }
+
+    if (onlineStarted) return;
+
+    gameMode = GAME_MODES.ONLINE;
+    showOnlineFlow(true);
+    const flow = ensureOnlineFlow();
+    flow.innerHTML = '';
+    onlineLobby = createOnlineLobby({
+      root: flow,
+      netClient,
+      onReady() {
+        flow.innerHTML = '';
+        createOnlineSelection({
+          root: flow,
+          netClient,
+          onRevealComplete() {
+            onlineCtrl.start(netClient.slot);
+            onlineCtrl.updateHud();
+            beysChosen = true;
+            input.prepareOnline?.();
+            onSelectionComplete?.({ beysChosen: true, online: true });
+          },
+        });
+      },
+    });
+    onlineLobby.start(isGuest);
+    onlineStarted = true;
+  }
+
+  function beginOnlineRematchSelection() {
+    gameRef?.tearDownOnlineMatch?.();
+    showOnlineFlow(true);
+    const flow = ensureOnlineFlow();
+    flow.innerHTML = '';
+    createOnlineSelection({
+      root: flow,
+      netClient,
+      onRevealComplete() {
+        onlineCtrl.start(netClient.slot);
+        onlineCtrl.updateHud();
+        beysChosen = true;
+        input.prepareOnline?.();
+        selectOverlay.classList.add('hidden');
+        startOverlay.classList.add('hidden');
+        onSelectionComplete?.({ beysChosen: true, online: true });
+      },
+    });
     selectOverlay.classList.remove('hidden');
     startOverlay.classList.add('hidden');
+    gameoverOverlay?.classList.remove('visible');
+    beysChosen = false;
+  }
+
+  function openBeySelect({ forceOnlineHost = false } = {}) {
+    const savedRoom = forceOnlineHost ? null : netClient.roomId;
+    const wasGuest = forceOnlineHost ? false : netClient.slot === 1;
+
+    campaignCtrl.resetCampaign();
+    onlineCtrl.reset();
+    resetAIController();
+    if (isOnline(gameMode)) {
+      gameRef?.tearDownOnlineMatch?.();
+    }
+    netClient.close();
+    onlineStarted = false;
+    inputBuffer.reset();
+
+    if (isOnline(gameMode)) {
+      showOnlineFlow(true);
+      const rejoinAsGuest = !forceOnlineHost && (wasGuest || !!parseRoomFromUrl());
+      if (rejoinAsGuest && savedRoom && !parseRoomFromUrl()) {
+        ensureRoomInUrl(savedRoom);
+      }
+      startOnlineFlow({ asHost: !rejoinAsGuest, joinRoomId: rejoinAsGuest ? savedRoom : null });
+    } else {
+      showOnlineFlow(false);
+      selection?.reset(getPlayers());
+      selection?.setRivalLabel(getRivalLabel());
+    }
+
+    startOverlay.classList.add('hidden');
+    gameRef.returnToMenu();
+    selectOverlay.classList.remove('hidden');
     document.getElementById('campaign-hud')?.classList.add('hidden');
     beysChosen = false;
     btnStart.disabled = true;
@@ -84,7 +247,7 @@ export function createAppBootstrap({
       campaignCtrl.startTournament(picks[0]);
     } else if (gameMode === GAME_MODES.CASUAL) {
       campaignCtrl.startCasual(picks[0], difficulty);
-    } else {
+    } else if (gameMode !== GAME_MODES.ONLINE) {
       gameRef.state.aiBey = picks[1];
       campaignCtrl.resetCampaign();
     }
@@ -93,10 +256,12 @@ export function createAppBootstrap({
     resetAIController();
     applyModeUi();
     onSelectionComplete?.({ beysChosen: true });
-    setTimeout(() => {
-      selectOverlay.classList.add('hidden');
-      startOverlay.classList.remove('hidden');
-    }, 600);
+    if (gameMode !== GAME_MODES.ONLINE) {
+      setTimeout(() => {
+        selectOverlay.classList.add('hidden');
+        startOverlay.classList.remove('hidden');
+      }, 600);
+    }
   }
 
   selection = createBeySelection({
@@ -108,15 +273,26 @@ export function createAppBootstrap({
 
   const playSetup = createPlaySetup(playSetupEl, {
     show2Player,
+    showOnline: true,
     onChange({ mode, difficulty: diff }) {
       gameMode = mode;
       difficulty = diff;
       beysChosen = false;
       btnStart.disabled = true;
       campaignCtrl.resetCampaign();
+      onlineCtrl.reset();
       applyModeUi();
-      selection?.reset(getPlayers(), { keepCarousel: true });
-      selection?.setRivalLabel(getRivalLabel());
+
+      if (isOnline(gameMode)) {
+        startOnlineFlow({ asHost: true });
+      } else {
+        onlineStarted = false;
+        netClient.close();
+        showOnlineFlow(false);
+        selection?.reset(getPlayers(), { keepCarousel: true });
+        selection?.setRivalLabel(getRivalLabel());
+      }
+
       if (platform === 'mobile') {
         btnStart.textContent = 'Calibrate & Start';
         startOverlay.classList.add('hidden');
@@ -129,19 +305,29 @@ export function createAppBootstrap({
     getGameMode: () => gameMode,
     getBeysChosen: () => beysChosen,
     campaignCtrl,
+    onlineCtrl,
     openBeySelect,
     startOverlay,
     btnStart,
     resetAIController,
+    netClient,
+    inputBuffer,
+    netDebug,
+    getIsOnline: () => isOnline(gameMode),
+    getLocalSlot: () => netClient.slot ?? 0,
   });
 
   gameRef = createGame({
     mode: platform === 'mobile' ? 'mobile' : 'pc',
     canvas,
     isVsCpu: () => isVsCpu(gameMode),
+    isOnline: () => isOnline(gameMode),
+    getLocalSlot: () => netClient.slot ?? 0,
     ui: queryGameUi(queryUiOptions),
     input,
   });
+
+  onlineCtrl.wireNetHandlers(gameRef);
 
   ({ mode: gameMode, difficulty } = playSetup.getState());
   applyModeUi();
@@ -151,5 +337,71 @@ export function createAppBootstrap({
     startOverlay.classList.add('hidden');
   }
 
-  return { gameRef, selection, campaignCtrl, playSetup, get gameMode() { return gameMode; } };
+  if (parseRoomFromUrl()) {
+    playSetup.setMode(GAME_MODES.ONLINE, { silent: true });
+    gameMode = GAME_MODES.ONLINE;
+    applyModeUi();
+    startOnlineFlow({ asHost: false });
+  }
+
+  const e2eEnabled = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).get('e2e') === '1';
+  if (e2eEnabled) {
+    window.__BEYWEB_E2E__ = {
+      getState() {
+        const overlay = document.getElementById('gameover-overlay');
+        const countdown = document.getElementById('countdown-overlay');
+        const hud = document.getElementById('hud');
+        const btn = document.getElementById('btn-restart');
+        return {
+          gameFrozen: gameRef?.state.gameFrozen ?? false,
+          gameRunning: gameRef?.state.gameRunning ?? false,
+          awaitingRoundReady: onlineCtrl.isAwaitingRoundReady(),
+          wsOpen: netClient.wsOpen,
+          roomId: netClient.roomId,
+          slot: netClient.slot,
+          roundDebug: onlineCtrl.getDebugRoundState?.(),
+          gameoverVisible: overlay?.classList.contains('visible') ?? false,
+          countdownVisible: countdown?.classList.contains('visible') ?? false,
+          hudVisible: hud?.classList.contains('visible') ?? false,
+          restartLabel: btn?.textContent ?? '',
+          restartDisabled: btn?.disabled ?? false,
+          hasArenaBodies: !!(gameRef?.state.playerBody && gameRef?.state.aiBody),
+          onlineActive: onlineCtrl.isActive(),
+        };
+      },
+      tearDownMatch() {
+        gameRef?.tearDownOnlineMatch?.();
+      },
+      sendDebugRoundEnd() {
+        netClient.send({
+          type: 'debug_round_end',
+          roomId: netClient.roomId,
+          slot: netClient.slot,
+        });
+      },
+      sendReady() {
+        netClient.sendReady();
+      },
+      clickNextRound() {
+        onlineCtrl.handleRestart();
+      },
+      dispatchMessage(type, payload) {
+        netClient.debugEmit(type, payload);
+      },
+      netClient,
+      onlineCtrl,
+      gameRef,
+    };
+  }
+
+  return {
+    gameRef,
+    selection,
+    campaignCtrl,
+    onlineCtrl,
+    playSetup,
+    netClient,
+    get gameMode() { return gameMode; },
+  };
 }

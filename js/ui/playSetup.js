@@ -4,20 +4,21 @@ import { AI_DIFFICULTIES } from '../input/ai.js';
 /**
  * Mode + difficulty controls rendered inside the bey-select overlay (touch-friendly).
  */
-export function createPlaySetup(el, { show2Player = false, onChange } = {}) {
+export function createPlaySetup(el, { show2Player = false, showOnline = true, onChange } = {}) {
   let mode = GAME_MODES.TOURNAMENT;
   let difficulty = 1;
 
-  const modeButtons = show2Player
-    ? [
-        { id: GAME_MODES.CASUAL, label: 'Casual' },
-        { id: GAME_MODES.TOURNAMENT, label: 'Tournament' },
-        { id: GAME_MODES.TWO_PLAYER, label: '2 Players' },
-      ]
-    : [
-        { id: GAME_MODES.CASUAL, label: 'Casual' },
-        { id: GAME_MODES.TOURNAMENT, label: 'Tournament' },
-      ];
+  const modeButtons = [];
+  if (showOnline) {
+    modeButtons.push({ id: GAME_MODES.ONLINE, label: 'Online' });
+  }
+  modeButtons.push(
+    { id: GAME_MODES.CASUAL, label: 'Casual' },
+    { id: GAME_MODES.TOURNAMENT, label: 'Tournament' }
+  );
+  if (show2Player) {
+    modeButtons.push({ id: GAME_MODES.TWO_PLAYER, label: '2 Players' });
+  }
 
   el.innerHTML = `
     <div class="play-setup-modes" role="tablist" aria-label="Game mode"></div>
@@ -63,13 +64,18 @@ export function createPlaySetup(el, { show2Player = false, onChange } = {}) {
 
     const isCasual = mode === GAME_MODES.CASUAL;
     const isTournament = mode === GAME_MODES.TOURNAMENT;
+    const isOnline = mode === GAME_MODES.ONLINE;
     diffWrap.classList.toggle('hidden', !isCasual);
     el.classList.toggle('play-setup--casual', isCasual);
     el.classList.toggle('play-setup--tournament', isTournament);
     el.classList.toggle('play-setup--two-player', mode === GAME_MODES.TWO_PLAYER);
+    el.classList.toggle('play-setup--online', isOnline);
 
     if (hintEl) {
-      if (mode === GAME_MODES.TOURNAMENT) {
+      if (isOnline) {
+        hintEl.textContent = 'Host: share invite link · Guest: open link · Both tap Choose Your Bey';
+        hintEl.classList.remove('hidden');
+      } else if (mode === GAME_MODES.TOURNAMENT) {
         hintEl.textContent = 'Five rivals in order.';
         hintEl.classList.remove('hidden');
       } else if (isCasual) {
@@ -81,11 +87,11 @@ export function createPlaySetup(el, { show2Player = false, onChange } = {}) {
     }
   }
 
-  function setMode(next) {
+  function setMode(next, { silent = false } = {}) {
     if (mode === next) return;
     mode = next;
     paint();
-    onChange?.(getState());
+    if (!silent) onChange?.(getState());
   }
 
   function setDifficulty(tier) {

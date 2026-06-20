@@ -147,6 +147,7 @@ export function createLeoneAbilityVfx(scene) {
 
   // --- Tornado particle systems -------------------------------------------------
   const tornadoGroup = new THREE.Group();
+  tornadoGroup.frustumCulled = false;
   root.add(tornadoGroup);
 
   const GEO_BY_KIND = {

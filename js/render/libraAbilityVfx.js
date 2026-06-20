@@ -47,9 +47,9 @@ function createPillarStreakTexture() {
     const peak = 0.06 + Math.random() * 0.28;
     const grad = ctx.createLinearGradient(x, 0, x, 256);
     grad.addColorStop(0, 'rgba(255,255,255,0)');
-    grad.addColorStop(0.15, `rgba(255,255,252,${peak})`);
-    grad.addColorStop(0.55, `rgba(230,255,200,${peak * 0.75})`);
-    grad.addColorStop(0.9, `rgba(210,250,170,${peak * 0.3})`);
+    grad.addColorStop(0.12, `rgba(220,252,180,${peak})`);
+    grad.addColorStop(0.45, `rgba(132,204,22,${peak * 0.95})`);
+    grad.addColorStop(0.78, `rgba(101,163,13,${peak * 0.55})`);
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(x, 0, w, 256);
@@ -67,10 +67,12 @@ const SHIELD_GREEN = 0x4ade80;
 const SHIELD_LIME = 0xa3e635;
 const SHIELD_PALE = 0xd9f99d;
 
-const BUSTER_LIME = 0xecfccb;
-const BUSTER_NEON = 0xf7fee7;
-const BUSTER_WHITE = 0xffffff;
-const BUSTER_GLOW = 0xfefff5;
+/** Flame Libra bey colour (#84cc16 in beys.js) — Sonic Buster light pillar. */
+const BEY_GREEN = 0x84cc16;
+const BEY_GREEN_BRIGHT = 0xa3e635;
+const BEY_GREEN_SHINE = 0xbef264;
+const BEY_GREEN_CORE = 0xdcfce7;
+const BEY_GREEN_GLOW = 0x65a30d;
 
 const SAND_LIGHT = 0xe8d4b8;
 const SAND_MID = 0xc9a87a;
@@ -140,7 +142,7 @@ export function createLibraAbilityVfx(scene) {
   // --- Sonic Buster energy column (anime-style vertical pillar) ----------------
   const pillarShell = new THREE.Mesh(
     new THREE.CylinderGeometry(PILLAR_OUTER_R, PILLAR_OUTER_R * 1.04, PILLAR_HEIGHT, 40, 1, true),
-    makeMat(0xffffff, 0, { additive: true, doubleSide: true, map: pillarStreakTex })
+    makeMat(BEY_GREEN_BRIGHT, 0, { additive: true, doubleSide: true, map: pillarStreakTex })
   );
   pillarShell.position.y = PILLAR_HEIGHT * 0.5;
   pillarShell.renderOrder = 8;
@@ -148,7 +150,7 @@ export function createLibraAbilityVfx(scene) {
 
   const pillarMid = new THREE.Mesh(
     new THREE.CylinderGeometry(PILLAR_MID_R, PILLAR_MID_R * 0.98, PILLAR_HEIGHT * 0.98, 32, 1, true),
-    getMat(BUSTER_NEON, true, true)
+    getMat(BEY_GREEN_SHINE, true, true)
   );
   pillarMid.position.y = PILLAR_HEIGHT * 0.5;
   pillarMid.renderOrder = 9;
@@ -156,7 +158,7 @@ export function createLibraAbilityVfx(scene) {
 
   const pillarCore = new THREE.Mesh(
     new THREE.CylinderGeometry(PILLAR_CORE_R, PILLAR_CORE_R * 0.92, PILLAR_HEIGHT * 0.95, 24, 1, true),
-    getMat(BUSTER_WHITE, true, true)
+    getMat(BEY_GREEN_CORE, true, true)
   );
   pillarCore.position.y = PILLAR_HEIGHT * 0.5;
   pillarCore.renderOrder = 10;
@@ -188,7 +190,7 @@ export function createLibraAbilityVfx(scene) {
     const h = 3.5 + rand(s + 1) * 14;
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(0.06 + rand(s + 2) * 0.1, h),
-      getMat(rand(s + 3) > 0.45 ? BUSTER_GLOW : BUSTER_LIME, true)
+      getMat(rand(s + 3) > 0.45 ? BEY_GREEN_BRIGHT : BEY_GREEN_GLOW, true)
     );
     mesh.rotation.y = angle;
     mesh.renderOrder = 12;
@@ -328,9 +330,9 @@ export function createLibraAbilityVfx(scene) {
     pillarStreakTex.offset.y = pillarScroll;
 
     const pulse = 0.88 + 0.12 * Math.sin(pitT * 6);
-    const shellOp = 0.2 * env * pulse;
-    const midOp = 0.1 * env * pulse;
-    const coreOp = 0.16 * env;
+    const shellOp = 0.28 * env * pulse;
+    const midOp = 0.18 * env * pulse;
+    const coreOp = 0.24 * env * (0.9 + 0.1 * Math.sin(pitT * 4));
     const baseOp = 0.48 * env * (0.92 + 0.08 * Math.sin(pitT * 8));
 
     pillarShell.material.opacity = shellOp;
@@ -349,7 +351,7 @@ export function createLibraAbilityVfx(scene) {
       );
       s.mesh.rotation.y = s.angle;
       const streakEnv = env * clamp01(1 - Math.abs(y - PILLAR_HEIGHT * 0.45) / (PILLAR_HEIGHT * 0.55));
-      s.mesh.material.opacity = (0.14 + 0.1 * Math.sin(pitT * 5 + s.angle * 3)) * streakEnv;
+      s.mesh.material.opacity = (0.2 + 0.12 * Math.sin(pitT * 5 + s.angle * 3)) * streakEnv;
     }
   }
 

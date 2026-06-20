@@ -1,7 +1,8 @@
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
 import { applySteerForce, computeSteerForce } from '../physics/steer.js';
-import { isAtPocketAngle } from '../physics/arena.js';
+import { isAtPocketAngle, POCKET_TOLERANCE } from '../physics/arenaGeometry.js';
+import { clamp01 } from '../utils/math.js';
 
 const _force = new CANNON.Vec3();
 
@@ -35,10 +36,6 @@ let _abilityDecisionT = 0;
 let _steerMode = 'chase';
 let _orbitDir = 1;
 
-function clamp01(v) {
-  return Math.max(0, Math.min(1, v));
-}
-
 function tierConfig() {
   return AI_TIERS[Math.min(_tier, AI_TIERS.length - 1)] ?? AI_TIERS[1];
 }
@@ -59,7 +56,7 @@ function edgeFracForBody(body) {
   return (cr + outerR * 0.45) / CONFIG.WALL_RADIUS;
 }
 
-function isNearPocket(body, toleranceMult = 1.35) {
+function isNearPocket(body, toleranceMult = POCKET_TOLERANCE.ai) {
   const cr = Math.hypot(body.position.x, body.position.z);
   if (cr < 0.01) return false;
   return isAtPocketAngle(Math.atan2(body.position.z, body.position.x), toleranceMult);
@@ -255,7 +252,7 @@ function applyEdgeSafety(aiBody, spin, aiForce, persona) {
     const escape = (0.25 + edgeSkill * 0.55 + persona.aggression * 0.2) * (inPocket ? 1.35 : 0.85);
     const tangX = -az / cr;
     const tangZ = ax / cr;
-    const pocketBias = isNearPocket(aiBody, 1.05) ? _orbitDir : -_orbitDir;
+    const pocketBias = isNearPocket(aiBody, POCKET_TOLERANCE.aiEscape) ? _orbitDir : -_orbitDir;
     _force.set(tangX * force * escape * 0.65 * pocketBias, 0, tangZ * force * escape * 0.65 * pocketBias);
     aiBody.applyForce(_force, aiBody.position);
   }

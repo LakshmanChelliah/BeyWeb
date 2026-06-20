@@ -18,12 +18,12 @@ export function createKeyboardInput(
     KeyD: false,
   };
 
-  // P1: Q power · E special. P2 (2-player): . power · / special.
+  // P1: Q power · E special. P2 (2-player): , power · . special.
   const abilityKeys = {
     KeyQ: { player: 1, slot: 'power' },
     KeyE: { player: 1, slot: 'special' },
-    Period: { player: 2, slot: 'power' },
-    Slash: { player: 2, slot: 'special' },
+    Comma: { player: 2, slot: 'power' },
+    Period: { player: 2, slot: 'special' },
   };
 
   function clearKeys() {
@@ -76,10 +76,10 @@ export function createKeyboardInput(
     applyDirectionalSteer(body, spin, () => {
       let dirX = 0;
       let dirZ = 0;
-      if (keys.ArrowLeft) dirX -= 1;
-      if (keys.ArrowRight) dirX += 1;
-      if (keys.ArrowUp) dirZ -= 1;
-      if (keys.ArrowDown) dirZ += 1;
+      if (keys.KeyA) dirX -= 1;
+      if (keys.KeyD) dirX += 1;
+      if (keys.KeyW) dirZ -= 1;
+      if (keys.KeyS) dirZ += 1;
       return { dirX, dirZ };
     });
   }
@@ -88,10 +88,10 @@ export function createKeyboardInput(
     applyDirectionalSteer(body, spin, () => {
       let dirX = 0;
       let dirZ = 0;
-      if (keys.KeyA) dirX -= 1;
-      if (keys.KeyD) dirX += 1;
-      if (keys.KeyW) dirZ -= 1;
-      if (keys.KeyS) dirZ += 1;
+      if (keys.ArrowLeft) dirX -= 1;
+      if (keys.ArrowRight) dirX += 1;
+      if (keys.ArrowUp) dirZ -= 1;
+      if (keys.ArrowDown) dirZ += 1;
       return { dirX, dirZ };
     });
   }

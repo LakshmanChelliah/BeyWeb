@@ -181,6 +181,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
       card.classList.toggle('taken', taken);
       btn.disabled = taken || !isCenter;
       btn.textContent = taken ? 'TAKEN' : 'SELECT';
+      btn.setAttribute('aria-label', taken ? `${bey.name} taken` : `Select ${bey.name}`);
     });
 
     dots.forEach((d, i) => d.classList.toggle('on', i === currentIndex));
