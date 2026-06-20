@@ -176,12 +176,18 @@ export function createGyroInput(canvas) {
     return granted;
   }
 
+  function injectTestOrientation(beta, gamma) {
+    startListening();
+    onDeviceOrientation({ beta, gamma, alpha: 0 });
+  }
+
   return {
     requestMotionPermission,
     calibrateOnce,
     calibrateNow,
     startListening,
     enable,
+    injectTestOrientation,
     applyGyroSteer,
     getSteerDirection() {
       const { tiltX, tiltZ } = readTilt();

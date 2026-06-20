@@ -93,6 +93,7 @@ createAppBootstrap({
     netDebug,
     getIsOnline,
     getLocalSlot,
+    registerE2E,
   }) {
     const remote = createRemoteInput({
       localSlot: getLocalSlot,
@@ -108,6 +109,30 @@ createAppBootstrap({
       inputBuffer.setSteer(dir.x, dir.y);
       return dir;
     }
+
+    registerE2E?.({
+      getGyroState() {
+        const steer = inputBuffer.getSteer();
+        return {
+          steer,
+          steerMag: Math.hypot(steer.x, steer.y),
+          active: gyro.isActive(),
+          fallback: gyro.isUsingFallback(),
+        };
+      },
+      async enableGyro(opts = {}) {
+        return ensureGyro(opts);
+      },
+      refreshGyroSteer() {
+        return syncGyroSteer();
+      },
+      calibrateGyro() {
+        return gyro.calibrateNow();
+      },
+      simulateOrientation(beta, gamma) {
+        gyro.injectTestOrientation(beta, gamma);
+      },
+    });
 
     return {
       queueAbility(slot) {

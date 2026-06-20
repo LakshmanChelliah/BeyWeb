@@ -40,6 +40,7 @@ export function createAppBootstrap({
   let onlineStarted = false;
   /** @type {ReturnType<typeof buildInput> | null} */
   let input = null;
+  const e2eExtensions = {};
 
   const netClient = createNetClient();
   const inputBuffer = createInputBuffer();
@@ -320,6 +321,9 @@ export function createAppBootstrap({
     netDebug,
     getIsOnline: () => isOnline(gameMode),
     getLocalSlot: () => netClient.slot ?? 0,
+    registerE2E(ext) {
+      Object.assign(e2eExtensions, ext);
+    },
   });
 
   gameRef = createGame({
@@ -397,6 +401,7 @@ export function createAppBootstrap({
       netClient,
       onlineCtrl,
       gameRef,
+      ...e2eExtensions,
     };
   }
 
