@@ -73,7 +73,7 @@ export function createPlaySetup(el, { show2Player = false, showOnline = true, on
 
     if (hintEl) {
       if (isOnline) {
-        hintEl.textContent = 'Host: share invite link · Guest: open link · Both tap Choose Your Bey';
+        hintEl.textContent = 'Host: share code or link · Guest: enter room code or open invite link';
         hintEl.classList.remove('hidden');
       } else if (mode === GAME_MODES.TOURNAMENT) {
         hintEl.textContent = 'Five rivals in order.';

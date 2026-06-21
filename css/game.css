@@ -1783,6 +1783,122 @@ body.mobile .pick-bey {
   border: 1px solid rgba(120, 160, 255, 0.15);
 }
 
+.online-lobby-entry {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.online-join-block {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(120, 160, 255, 0.15);
+}
+
+.online-lobby-divider {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6b7ca8;
+}
+
+.online-code-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8eeff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+  font-family: ui-monospace, monospace;
+}
+
+.online-code-input::placeholder {
+  color: #5a6a90;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.online-join-btn,
+.online-create-btn {
+  appearance: none;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.online-join-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+}
+
+.online-join-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.online-create-btn {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e8eeff;
+}
+
+.online-create-btn:hover:not(:disabled),
+.online-join-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.online-lobby-room {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.online-room-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.online-copy-code-btn {
+  appearance: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 160, 255, 0.3);
+  background: rgba(79, 140, 255, 0.12);
+  color: #c5d8ff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
 .online-link-label {
   margin: 0 0 10px;
   font-size: 11px;

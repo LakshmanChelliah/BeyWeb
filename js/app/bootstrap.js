@@ -135,22 +135,21 @@ export function createAppBootstrap({
     history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   }
 
-  function startOnlineFlow({ asHost = false, joinRoomId = null } = {}) {
-    if (!asHost && joinRoomId && !parseRoomFromUrl()) {
-      ensureRoomInUrl(joinRoomId);
+  function startOnlineFlow({ autoRoom = null, createAsHost = false } = {}) {
+    if (autoRoom && !parseRoomFromUrl()) {
+      ensureRoomInUrl(autoRoom);
     }
-    const joinFromUrl = !!parseRoomFromUrl();
-    const isGuest = !asHost && joinFromUrl;
+    const roomFromUrl = autoRoom ?? parseRoomFromUrl();
 
-    if (onlineStarted && !asHost) return;
+    if (onlineStarted && !roomFromUrl && !createAsHost) return;
 
-    if (asHost) {
+    if (createAsHost) {
       netClient.close();
       onlineStarted = false;
-      if (joinFromUrl) clearRoomFromUrl();
+      if (parseRoomFromUrl()) clearRoomFromUrl();
     }
 
-    if (onlineStarted) return;
+    if (onlineStarted && roomFromUrl) return;
 
     gameMode = GAME_MODES.ONLINE;
     showOnlineFlow(true);
@@ -159,6 +158,7 @@ export function createAppBootstrap({
     onlineLobby = createOnlineLobby({
       root: flow,
       netClient,
+      onRoomJoined: ensureRoomInUrl,
       onReady() {
         flow.innerHTML = '';
         createOnlineSelection({
@@ -175,7 +175,7 @@ export function createAppBootstrap({
         });
       },
     });
-    onlineLobby.start(isGuest);
+    onlineLobby.start({ autoRoom: roomFromUrl, createAsHost });
     onlineStarted = true;
   }
 
@@ -224,7 +224,10 @@ export function createAppBootstrap({
       if (rejoinAsGuest && savedRoom && !parseRoomFromUrl()) {
         ensureRoomInUrl(savedRoom);
       }
-      startOnlineFlow({ asHost: !rejoinAsGuest, joinRoomId: rejoinAsGuest ? savedRoom : null });
+      startOnlineFlow({
+        autoRoom: rejoinAsGuest ? (savedRoom ?? parseRoomFromUrl()) : null,
+        createAsHost: !rejoinAsGuest,
+      });
     } else {
       showOnlineFlow(false);
       selection?.reset(getPlayers());
@@ -290,7 +293,7 @@ export function createAppBootstrap({
 
       if (isOnline(gameMode)) {
         input?.prepareOnline?.();
-        startOnlineFlow({ asHost: true });
+        startOnlineFlow();
       } else {
         onlineStarted = false;
         netClient.close();
@@ -350,7 +353,7 @@ export function createAppBootstrap({
     playSetup.setMode(GAME_MODES.ONLINE, { silent: true });
     gameMode = GAME_MODES.ONLINE;
     applyModeUi();
-    startOnlineFlow({ asHost: false });
+    startOnlineFlow({ autoRoom: parseRoomFromUrl() });
   }
 
   const e2eEnabled = typeof location !== 'undefined'

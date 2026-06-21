@@ -4,6 +4,8 @@ import {
   setupOnlineMatch,
   waitForE2E,
   waitForRoomLink,
+  createOnlineRoom,
+  joinOnlineRoom,
   forceRoundEnd,
   forceSeriesEnd,
   clickNextRound,
@@ -158,11 +160,13 @@ test('online bey selection shows centered emblem layout', async ({ browser }) =>
     await waitForE2E(host);
     await host.getByRole('button', { name: 'Online' }).click();
     await host.waitForSelector('#online-flow:not(.hidden)');
-    const joinUrl = await waitForRoomLink(host);
-    const guestUrl = joinUrl.includes('?') ? `${joinUrl}&e2e=1` : `${joinUrl}?e2e=1`;
-    await guest.goto(guestUrl);
-    await guest.waitForSelector('#online-flow:not(.hidden)');
+    const joinUrl = await createOnlineRoom(host);
+    const roomCode = new URL(joinUrl).searchParams.get('room');
+    await guest.goto('/pc/?e2e=1');
     await waitForE2E(guest);
+    await guest.getByRole('button', { name: 'Online' }).click();
+    await guest.waitForSelector('#online-flow:not(.hidden)');
+    await joinOnlineRoom(guest, roomCode);
     await host.waitForSelector('#online-continue:not([disabled])');
     await guest.waitForSelector('#online-continue:not([disabled])');
     await host.click('#online-continue');

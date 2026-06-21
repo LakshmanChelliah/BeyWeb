@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { hostGuestPair, waitForE2E, waitForRoomLink } from './helpers/onlineMatch.js';
+import { hostGuestPair, waitForE2E, waitForRoomLink, createOnlineRoom } from './helpers/onlineMatch.js';
 
 test('guest joins host lobby via invite link (does not create new room)', async ({ browser }) => {
   const { host, guest, hostContext, guestContext } = await hostGuestPair(browser);
@@ -10,7 +10,7 @@ test('guest joins host lobby via invite link (does not create new room)', async 
     await host.getByRole('button', { name: 'Online' }).click();
     await host.waitForSelector('#online-flow:not(.hidden)');
 
-    const joinUrl = await waitForRoomLink(host);
+    const joinUrl = await createOnlineRoom(host);
     expect(joinUrl).toMatch(/room=[A-Z0-9]+/);
 
     const hostRoom = await host.evaluate(() => window.__BEYWEB_E2E__.getState().roomId);
@@ -31,7 +31,7 @@ test('guest joins host lobby via invite link (does not create new room)', async 
 
     await expect(guest.locator('#online-host-panel')).toBeHidden();
     await expect(guest.getByText('Joined room')).toBeVisible();
-    await expect(host.getByText(/share the link/i)).toBeVisible();
+    await expect(host.getByText(/share the (code or )?link/i)).toBeVisible();
 
     await host.waitForSelector('#online-continue:not([disabled])');
     await guest.waitForSelector('#online-continue:not([disabled])');
@@ -47,6 +47,8 @@ test('online lobby copy link button works', async ({ page }) => {
   await page.goto('/pc/?e2e=1');
   await waitForE2E(page);
   await page.getByRole('button', { name: 'Online' }).click();
+  await page.waitForSelector('#online-flow:not(.hidden)');
+  await createOnlineRoom(page);
   await page.waitForSelector('#online-link');
 
   const link = await page.inputValue('#online-link');

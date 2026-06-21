@@ -37,8 +37,8 @@ test.describe('Mobile UI', () => {
   test('online mode shows lobby on mobile', async ({ page }) => {
     await clickMode(page, 'Online');
     await expect(page.locator('#online-flow')).not.toHaveClass(/hidden/);
-    await page.waitForSelector('#online-link', { timeout: 15000 });
-    await expect(page.locator('#online-link')).not.toHaveValue('');
+    await expect(page.locator('#online-join-code')).toBeVisible();
+    await expect(page.locator('#online-create-btn')).toBeVisible();
   });
 
   test('bey selection title on mobile', async ({ page }) => {

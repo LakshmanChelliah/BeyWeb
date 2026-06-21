@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { hostGuestPair, waitForE2E, selectOnlineMode } from './helpers/onlineMatch.js';
+import { hostGuestPair, waitForE2E, selectOnlineMode, createOnlineRoom, joinOnlineRoom } from './helpers/onlineMatch.js';
 import { waitForOnlineMatch } from './helpers/ui.js';
 
 test('online bey selection: lock, unlock, and match start', async ({ browser }) => {
@@ -7,12 +7,13 @@ test('online bey selection: lock, unlock, and match start', async ({ browser }) 
   try {
     await selectOnlineMode(host);
     await waitForE2E(host);
-    await host.waitForSelector('#online-link');
-    const joinUrl = await host.inputValue('#online-link');
-    const guestUrl = joinUrl.includes('?') ? `${joinUrl}&e2e=1` : `${joinUrl}?e2e=1`;
+    const joinUrl = await createOnlineRoom(host);
+    const roomCode = new URL(joinUrl).searchParams.get('room');
 
-    await guest.goto(guestUrl);
+    await selectOnlineMode(guest);
     await waitForE2E(guest);
+    await joinOnlineRoom(guest, roomCode);
+
     await host.waitForSelector('#online-continue:not([disabled])');
     await guest.waitForSelector('#online-continue:not([disabled])');
     await host.click('#online-continue');

@@ -38,18 +38,30 @@ export async function waitForRoomLink(page) {
   return page.inputValue('#online-link');
 }
 
+export async function createOnlineRoom(page) {
+  await page.click('#online-create-btn');
+  return waitForRoomLink(page);
+}
+
+export async function joinOnlineRoom(page, roomCode) {
+  await page.fill('#online-join-code', roomCode);
+  await page.click('#online-join-btn');
+  await page.waitForFunction(() => {
+    const panel = document.getElementById('online-room-panel');
+    return panel && !panel.hidden;
+  }, null, { timeout: 15000 });
+}
+
 export async function setupOnlineMatch(host, guest) {
   await selectOnlineMode(host);
   await waitForE2E(host);
 
-  const joinUrl = await waitForRoomLink(host);
-  const guestUrl = joinUrl.includes('?')
-    ? `${joinUrl}&e2e=1`
-    : `${joinUrl}?e2e=1`;
+  const joinUrl = await createOnlineRoom(host);
+  const roomCode = new URL(joinUrl).searchParams.get('room');
 
-  await guest.goto(guestUrl);
-  await guest.waitForSelector('#online-flow:not(.hidden)');
+  await selectOnlineMode(guest);
   await waitForE2E(guest);
+  await joinOnlineRoom(guest, roomCode);
 
   await host.waitForSelector('#online-continue:not([disabled])');
   await guest.waitForSelector('#online-continue:not([disabled])');

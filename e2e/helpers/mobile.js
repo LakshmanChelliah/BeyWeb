@@ -14,6 +14,8 @@ import {
   clickNextRound,
   clickRematch,
   syncRematchReady,
+  createOnlineRoom,
+  joinOnlineRoom,
 } from './onlineMatch.js';
 
 export { gotoMobileE2E, getE2EState, waitForOnlineMatch } from './ui.js';
@@ -106,13 +108,14 @@ export async function setupMobileOnlineMatch(host, guest) {
   await host.getByRole('button', { name: 'Online' }).click();
   await host.waitForSelector('#online-flow:not(.hidden)');
 
-  await host.waitForSelector('#online-link');
-  const joinUrl = await host.inputValue('#online-link');
-  const guestUrl = joinUrl.includes('?') ? `${joinUrl}&e2e=1` : `${joinUrl}?e2e=1`;
+  const joinUrl = await createOnlineRoom(host);
+  const roomCode = new URL(joinUrl).searchParams.get('room');
 
-  await guest.goto(guestUrl);
-  await guest.waitForSelector('#online-flow:not(.hidden)');
+  await guest.goto('/?e2e=1');
   await waitForE2E(guest);
+  await guest.getByRole('button', { name: 'Online' }).click();
+  await guest.waitForSelector('#online-flow:not(.hidden)');
+  await joinOnlineRoom(guest, roomCode);
 
   await host.waitForSelector('#online-continue:not([disabled])');
   await guest.waitForSelector('#online-continue:not([disabled])');

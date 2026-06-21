@@ -100,12 +100,19 @@ export function createNetClient({ onMessage, onStatus } = {}) {
     await connect();
     send({ type: MSG.JOIN_ROOM, roomId: id });
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        offOk();
+        offErr();
+        reject(new Error('Game server not responding'));
+      }, 8000);
       const offOk = on(MSG.JOINED, (msg) => {
+        clearTimeout(timer);
         offOk();
         offErr();
         resolve(msg);
       });
       const offErr = on(MSG.ERROR, (msg) => {
+        clearTimeout(timer);
         offOk();
         offErr();
         reject(new Error(msg.message || 'Join failed'));
