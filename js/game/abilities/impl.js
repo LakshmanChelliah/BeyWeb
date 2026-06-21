@@ -2311,6 +2311,8 @@ export function getCameraCue(state, dt, mode) {
 export function resetStarBlastCamera() {
   _camSmoothLift = 0;
   _camStadiumT = 0;
+  _camFocusX = 0;
+  _camFocusZ = 0;
   _camFocusReady = false;
 }
 

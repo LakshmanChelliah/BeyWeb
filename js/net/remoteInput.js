@@ -12,8 +12,14 @@ const SEND_INTERVAL_MS = 1000 / TICK_RATE;
  */
 export function createRemoteInput({ localSlot, inputBuffer, netClient, isOnline }) {
   let lastSendAt = 0;
+  let lastSentSteer = { x: 0, y: 0 };
 
   return {
+    getSteerMag() {
+      const s = inputBuffer.getSteer();
+      return Math.hypot(s.x, s.y);
+    },
+
     applySteering(state) {
       if (!isOnline()) return;
 
@@ -33,8 +39,10 @@ export function createRemoteInput({ localSlot, inputBuffer, netClient, isOnline 
       }
 
       const now = performance.now();
-      if (now - lastSendAt < SEND_INTERVAL_MS) return;
+      const steerDelta = Math.hypot(steer.x - lastSentSteer.x, steer.y - lastSentSteer.y);
+      if (now - lastSendAt < SEND_INTERVAL_MS && steerDelta < 0.08) return;
       lastSendAt = now;
+      lastSentSteer = { ...steer };
 
       const input = inputBuffer.consume();
       netClient.sendInput(input.tick, input.steer, input.ability);
@@ -51,6 +59,7 @@ export function createRemoteInput({ localSlot, inputBuffer, netClient, isOnline 
 
     reset() {
       lastSendAt = 0;
+      lastSentSteer = { x: 0, y: 0 };
     },
   };
 }

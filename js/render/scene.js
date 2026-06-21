@@ -106,6 +106,32 @@ export function resetMobileCameraFraming() {
   _lookReady = false;
 }
 
+/** Snap camera to the arena after ring-out / ability cinematics so the next round is visible immediately. */
+export function snapArenaCamera(camera, state, mode) {
+  resetMobileCameraFraming();
+
+  const inArena = arenaTopPositions(state);
+  let midX = 0;
+  let midZ = 0;
+  if (mode === 'pc' && state.playerBody && state.aiBody) {
+    midX = (state.playerBody.position.x + state.aiBody.position.x) * 0.5;
+    midZ = (state.playerBody.position.z + state.aiBody.position.z) * 0.5;
+  } else if (inArena.length > 0) {
+    const focus = focusFromPositions(inArena);
+    midX = focus.x;
+    midZ = focus.z;
+  } else if (state.playerBody) {
+    midX = state.playerBody.position.x;
+    midZ = state.playerBody.position.z;
+  }
+
+  camera.position.set(midX, 24, midZ + 20);
+  _lookX = midX;
+  _lookZ = midZ;
+  _lookY = 0;
+  _lookReady = true;
+}
+
 export function updateCamera(camera, state, mode, cameraCue = 0) {
   if (!state.playerBody) return;
 

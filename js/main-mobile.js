@@ -138,6 +138,9 @@ createAppBootstrap({
       queueAbility(slot) {
         inputBuffer.queueAbility(slot);
       },
+      getSteerMag() {
+        return remote.getSteerMag();
+      },
       applySteering(state) {
         if (getIsOnline()) {
           syncGyroSteer(state);

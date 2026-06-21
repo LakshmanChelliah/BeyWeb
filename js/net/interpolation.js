@@ -71,21 +71,21 @@ function interpolateBody(body, a, b, t) {
   applyUserData(body, t >= 0.5 ? b.ud : a.ud);
 }
 
-function reconcileBody(body, target, dt) {
+function reconcileBody(body, target, dt, { steering = false } = {}) {
   if (!body || !target) return;
   const dx = target.x - body.position.x;
   const dy = target.y - body.position.y;
   const dz = target.z - body.position.z;
   const err = Math.hypot(dx, dz);
+  const posRate = Math.min(1, dt * (steering ? RECONCILE_RATE * 0.35 : RECONCILE_RATE));
+  const velRate = Math.min(1, dt * (steering ? 3 : 12));
   if (err > SNAP_EPS) {
     body.position.set(target.x, target.y, target.z);
   } else {
-    const rate = Math.min(1, dt * RECONCILE_RATE);
-    body.position.x += dx * rate;
-    body.position.y += dy * rate;
-    body.position.z += dz * rate;
+    body.position.x += dx * posRate;
+    body.position.y += dy * posRate;
+    body.position.z += dz * posRate;
   }
-  const velRate = Math.min(1, dt * 10);
   body.velocity.x = lerp(body.velocity.x, target.vx, velRate);
   body.velocity.y = lerp(body.velocity.y, target.vy, velRate);
   body.velocity.z = lerp(body.velocity.z, target.vz, velRate);
@@ -148,7 +148,7 @@ export function createInterpolator() {
       delayTicks = Math.min(MAX_DELAY_TICKS, Math.max(BASE_DELAY_TICKS, halfTripTicks + 1));
     },
 
-    update(dt, state, localSlot = 0) {
+    update(dt, state, localSlot = 0, { steerMag = 0 } = {}) {
       if (!snapshots.length || !state.playerBody) return;
 
       const latest = snapshots[snapshots.length - 1];
@@ -168,7 +168,7 @@ export function createInterpolator() {
 
       const localBody = localSide === 'player' ? state.playerBody : state.aiBody;
       const localData = bodyDataForSide(latest, localSide);
-      reconcileBody(localBody, localData, dt);
+      reconcileBody(localBody, localData, dt, { steering: steerMag > 0.08 });
     },
 
     reset() {

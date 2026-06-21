@@ -12,8 +12,6 @@ import {
   updateTopCollisions,
   beginLaunchDrop,
   stepSleepOutTimers,
-  applyCenterPull,
-  pinTopToFloor,
 } from '../physics/top.js';
 import {
   beginRingOut,
@@ -22,7 +20,7 @@ import {
 } from '../physics/ringOut.js';
 import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
-import { createScene, updateCamera, resetMobileCameraFraming } from '../render/scene.js';
+import { createScene, updateCamera, resetMobileCameraFraming, snapArenaCamera } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
 import { createTopGroups, loadTopModel, setTopEmissive } from '../render/top.js';
 import { beyColorHex, getBeyOrDefault } from './beys.js';
@@ -238,6 +236,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     netInterpolator.reset();
     lastServerTick = 0;
     lastSnapAt = 0;
+    state.accumulator = 0;
     state.gameFrozen = false;
     state.pendingKo = null;
     dom.startOverlay.classList.add('hidden');
@@ -626,6 +625,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     // Always bind visuals to sim groups/bodies (player=slot0, ai=slot1).
     loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
     loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
+    snapArenaCamera(camera, state, mode);
   }
 
   function returnToMenu() {
@@ -676,17 +676,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
 
     if (state.gameRunning && !state.gameFrozen) {
       if (onlineActive()) {
-        input.applySteering?.(state);
         updateTopCollisions(state);
-        const localBody = localSlot() === 0 ? state.playerBody : state.aiBody;
-        const localSpin = localSlot() === 0 ? state.playerSpin : state.aiSpin;
-        const localSign = localSlot() === 0 ? 1 : -0.95;
-        if (localBody && !state.pendingKo) {
-          applyCenterPull(localBody, localSpin);
-          stabilizeTop(localBody, localSpin, localSign, state.launchGrace);
-          pinTopToFloor(localBody);
+        state.accumulator += dt;
+        while (state.accumulator >= CONFIG.FIXED_DT) {
+          stepPhysics();
+          state.accumulator -= CONFIG.FIXED_DT;
         }
-        netInterpolator.update(dt, state, localSlot());
+        const steerMag = input.getSteerMag?.() ?? 0;
+        netInterpolator.update(dt, state, localSlot(), { steerMag });
       } else {
       if (state.launchGrace > 0) {
         state.launchGrace = Math.max(0, state.launchGrace - dt);

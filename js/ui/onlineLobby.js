@@ -66,10 +66,25 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
         </div>
 
         <p class="online-wait-hint" id="online-wait" aria-live="polite">Waiting for opponent…</p>
+      </div>
 
-        <button type="button" class="online-continue-btn" id="online-continue" disabled>
-          Choose Your Bey
-        </button>
+      <div class="online-ready-popup" id="online-ready-popup" hidden>
+        <div class="online-ready-popup-backdrop" aria-hidden="true"></div>
+        <div
+          class="online-ready-popup-card"
+          role="dialog"
+          aria-labelledby="online-ready-title"
+          aria-describedby="online-ready-desc"
+        >
+          <p class="online-ready-popup-eyebrow">Both connected</p>
+          <h3 class="online-ready-popup-title" id="online-ready-title">Ready to battle?</h3>
+          <p class="online-ready-popup-desc" id="online-ready-desc">
+            Pick your bey and lock in when you are ready.
+          </p>
+          <button type="button" class="online-continue-btn" id="online-continue" disabled>
+            Choose Your Bey
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -87,8 +102,20 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   const createBtn = root.querySelector('#online-create-btn');
   const waitEl = root.querySelector('#online-wait');
   const continueBtn = root.querySelector('#online-continue');
+  const readyPopup = root.querySelector('#online-ready-popup');
   const peerYou = root.querySelector('#peer-you');
   const peerOpp = root.querySelector('#peer-opp');
+
+  function hideReadyPopup() {
+    readyPopup.hidden = true;
+    continueBtn.disabled = true;
+  }
+
+  function showReadyPopup() {
+    continueBtn.disabled = false;
+    readyPopup.hidden = false;
+    continueBtn.focus({ preventScroll: true });
+  }
 
   function setStatus(text) {
     if (statusEl) statusEl.textContent = text;
@@ -99,7 +126,7 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     entryPanel.hidden = false;
     roomPanel.hidden = true;
     hostPanel.hidden = true;
-    continueBtn.disabled = true;
+    hideReadyPopup();
     peerYou?.classList.remove('connected');
     peerOpp?.classList.remove('connected');
   }
@@ -119,10 +146,13 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     peerYou?.classList.add('connected');
     peerOpp?.classList.toggle('connected', count >= 2);
     if (count >= 2) {
-      waitEl.textContent = 'Both connected — tap Choose Your Bey when ready';
-      continueBtn.disabled = false;
-    } else if (isGuest) {
-      waitEl.textContent = 'Waiting for opponent to join…';
+      waitEl.textContent = 'Rival connected — choose your bey when ready';
+      showReadyPopup();
+    } else {
+      hideReadyPopup();
+      if (isGuest) {
+        waitEl.textContent = 'Waiting for opponent to join…';
+      }
     }
   }
 
@@ -167,7 +197,10 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     }
   });
 
-  continueBtn.addEventListener('click', () => onReady?.());
+  continueBtn.addEventListener('click', () => {
+    hideReadyPopup();
+    onReady?.();
+  });
 
   function showHostPanel(msg) {
     hostMsg = msg;

@@ -150,6 +150,9 @@ createAppBootstrap({
       queueAbility(slot) {
         inputBuffer.queueAbility(slot);
       },
+      getSteerMag() {
+        return remote.getSteerMag();
+      },
       applySteering(state) {
         if (getIsOnline()) {
           const s = steerFromKeys(keyState, PC_STEER_MAP);
