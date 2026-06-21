@@ -3,7 +3,7 @@ import { applySteerForce } from '../physics/steer.js';
 import { normalizeSteer } from './inputBuffer.js';
 import { TICK_RATE } from './protocol.js';
 
-const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true };
+const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true, normalize: false };
 const SEND_INTERVAL_MS = 1000 / TICK_RATE;
 
 /**
@@ -27,7 +27,7 @@ export function createRemoteInput({ localSlot, inputBuffer, netClient, isOnline 
           steer.x,
           steer.y,
           spin,
-          CONFIG.STEER_FORCE,
+          CONFIG.GYRO_FORCE,
           STEER_OPTS
         );
       }

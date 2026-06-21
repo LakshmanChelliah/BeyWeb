@@ -29,12 +29,20 @@ export async function hostGuestPair(browser) {
   return { host, guest, hostContext, guestContext };
 }
 
+export async function waitForRoomLink(page) {
+  await page.waitForSelector('#online-link');
+  await page.waitForFunction(() => {
+    const link = document.getElementById('online-link')?.value ?? '';
+    return /room=[A-Z0-9]+/.test(link);
+  }, null, { timeout: 15000 });
+  return page.inputValue('#online-link');
+}
+
 export async function setupOnlineMatch(host, guest) {
   await selectOnlineMode(host);
   await waitForE2E(host);
 
-  await host.waitForSelector('#online-link');
-  const joinUrl = await host.inputValue('#online-link');
+  const joinUrl = await waitForRoomLink(host);
   const guestUrl = joinUrl.includes('?')
     ? `${joinUrl}&e2e=1`
     : `${joinUrl}?e2e=1`;
@@ -69,20 +77,22 @@ export async function forceRoundEnd(host, guest) {
   };
 
   let serverEnded = false;
-  try {
-    serverEnded = await host.evaluate(() => new Promise((resolve) => {
-      const e2e = window.__BEYWEB_E2E__;
-      const nc = e2e.netClient;
-      const timer = setTimeout(() => resolve(false), 3000);
-      const off = nc.on('round_end', () => {
-        clearTimeout(timer);
-        off();
-        resolve(true);
-      });
-      e2e.sendDebugRoundEnd();
-    }));
-  } catch {
-    serverEnded = false;
+  for (let attempt = 0; attempt < 2 && !serverEnded; attempt += 1) {
+    try {
+      serverEnded = await host.evaluate(() => new Promise((resolve) => {
+        const e2e = window.__BEYWEB_E2E__;
+        const nc = e2e.netClient;
+        const timer = setTimeout(() => resolve(false), 8000);
+        const off = nc.on('round_end', () => {
+          clearTimeout(timer);
+          off();
+          resolve(true);
+        });
+        e2e.sendDebugRoundEnd();
+      }));
+    } catch {
+      serverEnded = false;
+    }
   }
 
   if (!serverEnded) {
@@ -95,6 +105,70 @@ export async function forceRoundEnd(host, guest) {
         e2e.gameRef.endOnlineRound?.();
         e2e.dispatchMessage('round_end', msg);
       }, roundEndMsg);
+    }
+  }
+
+  await host.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.awaitingRoundReady && s.gameoverVisible;
+  }, null, { timeout: 30000 });
+  await guest.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.awaitingRoundReady && s.gameoverVisible;
+  }, null, { timeout: 30000 });
+}
+
+export async function forceSeriesEnd(host, guest) {
+  const endedOnServer = await host.evaluate(() => new Promise((resolve) => {
+    const e2e = window.__BEYWEB_E2E__;
+    const nc = e2e.netClient;
+    const timer = setTimeout(() => resolve(false), 12000);
+    let rounds = 0;
+    const cleanup = () => {
+      clearTimeout(timer);
+      offSeries?.();
+      offRound?.();
+    };
+    const offSeries = nc.on('series_end', () => {
+      cleanup();
+      resolve(true);
+    });
+    const offRound = nc.on('round_end', (msg) => {
+      if (msg.seriesOver) {
+        cleanup();
+        resolve(true);
+      }
+    });
+    const endRound = () => {
+      if (rounds >= 3) return;
+      rounds += 1;
+      e2e.sendDebugRoundEnd();
+    };
+    endRound();
+    const interval = setInterval(() => {
+      if (rounds >= 3) {
+        clearInterval(interval);
+        return;
+      }
+      endRound();
+    }, 600);
+  }));
+
+  if (!endedOnServer) {
+    const seriesEndMsg = {
+      winner: 0,
+      scores: [2, 0],
+      forfeit: false,
+    };
+    for (const page of [host, guest]) {
+      await page.evaluate((msg) => {
+        const e2e = window.__BEYWEB_E2E__;
+        if (!e2e.onlineCtrl.isActive()) {
+          e2e.onlineCtrl.start(e2e.netClient.slot ?? 0);
+        }
+        e2e.gameRef.endOnlineRound?.();
+        e2e.dispatchMessage('series_end', msg);
+      }, seriesEndMsg);
     }
   }
 

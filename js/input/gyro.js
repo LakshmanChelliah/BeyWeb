@@ -189,6 +189,13 @@ export function createGyroInput(canvas) {
     enable,
     injectTestOrientation,
     applyGyroSteer,
+    getSteerAnalog() {
+      const { tiltX, tiltZ } = readTilt();
+      return {
+        x: tiltX / CONFIG.GYRO_CLAMP,
+        y: tiltZ / CONFIG.GYRO_CLAMP,
+      };
+    },
     getSteerDirection() {
       const { tiltX, tiltZ } = readTilt();
       const len = Math.hypot(tiltX, tiltZ);

@@ -20,7 +20,7 @@
  */
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../../config.js';
-import { setBodyCollisions } from '../../physics/topPhysics.js';
+import { setBodyCollisions } from '../../physics/top.js';
 import {
   nearestSolidWallAngle,
   playableCenterRadius,

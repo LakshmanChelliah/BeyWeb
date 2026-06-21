@@ -3,41 +3,15 @@ import {
   hostGuestPair,
   setupOnlineMatch,
   waitForE2E,
+  waitForRoomLink,
   forceRoundEnd,
+  forceSeriesEnd,
   clickNextRound,
   clickRematch,
   syncRematchReady,
   getE2EState,
 } from './helpers/onlineMatch.js';
 import { waitForOnlineMatch } from './helpers/ui.js';
-
-async function forceSeriesEnd(host, guest) {
-  const seriesEndMsg = {
-    winner: 0,
-    scores: [2, 0],
-    forfeit: false,
-  };
-
-  for (const page of [host, guest]) {
-    await page.evaluate((msg) => {
-      const e2e = window.__BEYWEB_E2E__;
-      if (!e2e.onlineCtrl.isActive()) {
-        e2e.onlineCtrl.start(e2e.netClient.slot ?? 0);
-      }
-      e2e.gameRef.endOnlineRound?.();
-      e2e.dispatchMessage('series_end', msg);
-    }, seriesEndMsg);
-  }
-
-  await host.waitForFunction(() => {
-    const s = window.__BEYWEB_E2E__.getState();
-    return s.awaitingRoundReady && s.gameoverVisible;
-  }, null, { timeout: 20000 });
-  await guest.waitForFunction(() => {
-    const s = window.__BEYWEB_E2E__.getState();
-    return s.awaitingRoundReady && s.gameoverVisible;
-  }, null, { timeout: 20000 });
-}
 
 test('online next round respawns arena with HUD and controls', async ({ browser }) => {
   const { host, guest, hostContext, guestContext } = await hostGuestPair(browser);
@@ -183,12 +157,14 @@ test('online bey selection shows centered emblem layout', async ({ browser }) =>
     await host.goto('/pc/?e2e=1');
     await waitForE2E(host);
     await host.getByRole('button', { name: 'Online' }).click();
-    await host.waitForSelector('#online-link');
-    const joinUrl = await host.inputValue('#online-link');
+    await host.waitForSelector('#online-flow:not(.hidden)');
+    const joinUrl = await waitForRoomLink(host);
     const guestUrl = joinUrl.includes('?') ? `${joinUrl}&e2e=1` : `${joinUrl}?e2e=1`;
     await guest.goto(guestUrl);
+    await guest.waitForSelector('#online-flow:not(.hidden)');
     await waitForE2E(guest);
     await host.waitForSelector('#online-continue:not([disabled])');
+    await guest.waitForSelector('#online-continue:not([disabled])');
     await host.click('#online-continue');
     await guest.click('#online-continue');
 

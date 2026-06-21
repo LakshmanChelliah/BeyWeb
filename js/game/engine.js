@@ -12,6 +12,8 @@ import {
   updateTopCollisions,
   beginLaunchDrop,
   stepSleepOutTimers,
+  applyCenterPull,
+  pinTopToFloor,
 } from '../physics/top.js';
 import {
   beginRingOut,
@@ -676,6 +678,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       if (onlineActive()) {
         input.applySteering?.(state);
         updateTopCollisions(state);
+        const localBody = localSlot() === 0 ? state.playerBody : state.aiBody;
+        const localSpin = localSlot() === 0 ? state.playerSpin : state.aiSpin;
+        const localSign = localSlot() === 0 ? 1 : -0.95;
+        if (localBody && !state.pendingKo) {
+          applyCenterPull(localBody, localSpin);
+          stabilizeTop(localBody, localSpin, localSign, state.launchGrace);
+          pinTopToFloor(localBody);
+        }
         netInterpolator.update(dt, state, localSlot());
       } else {
       if (state.launchGrace > 0) {

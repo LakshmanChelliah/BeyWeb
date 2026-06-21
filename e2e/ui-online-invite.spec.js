@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { hostGuestPair, waitForE2E } from './helpers/onlineMatch.js';
+import { hostGuestPair, waitForE2E, waitForRoomLink } from './helpers/onlineMatch.js';
 
 test('guest joins host lobby via invite link (does not create new room)', async ({ browser }) => {
   const { host, guest, hostContext, guestContext } = await hostGuestPair(browser);
@@ -10,8 +10,7 @@ test('guest joins host lobby via invite link (does not create new room)', async 
     await host.getByRole('button', { name: 'Online' }).click();
     await host.waitForSelector('#online-flow:not(.hidden)');
 
-    await host.waitForSelector('#online-link');
-    const joinUrl = await host.inputValue('#online-link');
+    const joinUrl = await waitForRoomLink(host);
     expect(joinUrl).toMatch(/room=[A-Z0-9]+/);
 
     const hostRoom = await host.evaluate(() => window.__BEYWEB_E2E__.getState().roomId);

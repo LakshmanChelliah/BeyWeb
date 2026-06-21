@@ -8,7 +8,7 @@ import {
   stabilizeTop,
   beginLaunchDrop,
   updateTopCollisions,
-} from '../physics/topPhysics.js';
+} from '../physics/top.js';
 import { createGameState, resetRoundState } from './state.js';
 import { createAbilityRuntime } from './abilities.js';
 import { beyColorHex } from './beys.js';
@@ -16,7 +16,7 @@ import { createSeededRng, hashSeed } from '../utils/seededRng.js';
 import { applySteerForce } from '../physics/steer.js';
 import { triggerAbility as triggerAbilityCore } from './abilities.js';
 import { stepSimulation } from './simulation.js';
-import { decaySpin, stepSleepOutTimers } from '../physics/topPhysics.js';
+import { decaySpin, stepSleepOutTimers } from '../physics/top.js';
 import {
   cancelAbilitiesOnSpinStop,
   tickAbilityTimers,
@@ -30,7 +30,7 @@ import { evaluateWin } from './rules.js';
 import { beginRingOut, isRingOutCinematicDone } from '../physics/ringOut.js';
 import { clearAbilityFlags } from './abilities.js';
 
-const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true };
+const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true, normalize: false };
 
 /** userData keys replicated to clients for VFX / abilities */
 export const SYNC_USER_DATA_KEYS = [
@@ -175,7 +175,7 @@ export function createRemoteInputAdapter(getSlotInputs) {
         p.steer.x,
         p.steer.y,
         state.playerSpin,
-        CONFIG.STEER_FORCE,
+        CONFIG.GYRO_FORCE,
         STEER_OPTS
       );
       applySteerForce(
@@ -183,7 +183,7 @@ export function createRemoteInputAdapter(getSlotInputs) {
         a.steer.x,
         a.steer.y,
         state.aiSpin,
-        CONFIG.STEER_FORCE,
+        CONFIG.GYRO_FORCE,
         STEER_OPTS
       );
     },

@@ -164,31 +164,8 @@ export async function syncOnlineNextRound(host, guest) {
 }
 
 export async function forceMobileSeriesEnd(host, guest) {
-  const seriesEndMsg = {
-    winner: 0,
-    scores: [2, 0],
-    forfeit: false,
-  };
-
-  for (const page of [host, guest]) {
-    await page.evaluate((msg) => {
-      const e2e = window.__BEYWEB_E2E__;
-      if (!e2e.onlineCtrl.isActive()) {
-        e2e.onlineCtrl.start(e2e.netClient.slot ?? 0);
-      }
-      e2e.gameRef.endOnlineRound?.();
-      e2e.dispatchMessage('series_end', msg);
-    }, seriesEndMsg);
-  }
-
-  await host.waitForFunction(() => {
-    const s = window.__BEYWEB_E2E__.getState();
-    return s.awaitingRoundReady && s.gameoverVisible;
-  }, null, { timeout: 20000 });
-  await guest.waitForFunction(() => {
-    const s = window.__BEYWEB_E2E__.getState();
-    return s.awaitingRoundReady && s.gameoverVisible;
-  }, null, { timeout: 20000 });
+  const { forceSeriesEnd } = await import('./onlineMatch.js');
+  await forceSeriesEnd(host, guest);
 }
 
 export {

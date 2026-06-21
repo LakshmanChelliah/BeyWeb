@@ -105,9 +105,9 @@ createAppBootstrap({
     let pingTimer = 0;
 
     function syncGyroSteer(state) {
-      const dir = gyro.getSteerDirection();
-      inputBuffer.setSteer(dir.x, dir.y);
-      return dir;
+      const steer = gyro.getSteerAnalog();
+      inputBuffer.setSteer(steer.x, steer.y);
+      return steer;
     }
 
     registerE2E?.({
