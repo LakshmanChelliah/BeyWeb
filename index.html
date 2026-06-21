@@ -11,7 +11,7 @@
   <script src="/js/net/entryRoute.js"></script>
   <link rel="manifest" href="manifest.json" />
   <title>Spin Sumo | Beyblade Arena</title>
-  <link rel="stylesheet" href="css/game.css?v=12" />
+  <link rel="stylesheet" href="css/game.css?v=13" />
 </head>
 <body class="mobile">
 
@@ -20,6 +20,11 @@
       <div class="orientation-lock-icon" aria-hidden="true">↻</div>
       <p>Rotate your phone to portrait to play</p>
     </div>
+  </div>
+
+  <div id="boot-fallback" class="boot-fallback" hidden>
+    <p>Game failed to load. Check your connection and refresh.</p>
+    <button type="button" onclick="location.reload()">Retry</button>
   </div>
 
   <canvas id="game-canvas"></canvas>
@@ -75,16 +80,32 @@
     </div>
   </div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
-    }
-  }
+  <script>
+    (function () {
+      var useCdn = location.hostname === 'localhost' && location.port === '3000';
+      var imports = useCdn
+        ? {
+            three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+            'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/',
+            'cannon-es': 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js',
+          }
+        : {
+            three: '/vendor/three.module.js',
+            'three/addons/': '/vendor/three/examples/jsm/',
+            'cannon-es': '/vendor/cannon-es.js',
+          };
+      var el = document.createElement('script');
+      el.type = 'importmap';
+      el.textContent = JSON.stringify({ imports: imports });
+      document.head.appendChild(el);
+    })();
+    window.__BEYWEB_BOOT_TIMEOUT__ = setTimeout(function () {
+      if (window.__BEYWEB_BOOTED__) return;
+      var el = document.getElementById('boot-fallback');
+      if (el) el.hidden = false;
+    }, 12000);
   </script>
 
-  <script type="module" src="js/main-mobile.js?v=11"></script>
+  <script type="module" src="js/main-mobile.js?v=12"></script>
 </body>
 </html>

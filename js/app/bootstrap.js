@@ -405,6 +405,11 @@ export function createAppBootstrap({
     };
   }
 
+  if (typeof window !== 'undefined') {
+    window.__BEYWEB_BOOTED__ = true;
+    clearTimeout(window.__BEYWEB_BOOT_TIMEOUT__);
+  }
+
   return {
     gameRef,
     selection,

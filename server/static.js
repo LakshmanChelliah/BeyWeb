@@ -29,7 +29,31 @@ const ROUTES = {
   '/pc.html': 'pc.html',
 };
 
+const VENDOR_EXACT = {
+  '/vendor/three.module.js': 'node_modules/three/build/three.module.js',
+  '/vendor/cannon-es.js': 'node_modules/cannon-es/dist/cannon-es.js',
+};
+
+const VENDOR_PREFIX = {
+  '/vendor/three/examples/jsm/': 'node_modules/three/examples/jsm/',
+};
+
+function resolveVendorPath(pathname) {
+  const exact = VENDOR_EXACT[pathname];
+  if (exact) return resolve(ROOT, exact);
+  for (const [prefix, relDir] of Object.entries(VENDOR_PREFIX)) {
+    if (pathname.startsWith(prefix)) {
+      const sub = pathname.slice(prefix.length);
+      if (sub.includes('..')) return null;
+      return resolve(ROOT, relDir, sub);
+    }
+  }
+  return null;
+}
+
 function resolveStaticPath(pathname) {
+  const vendor = resolveVendorPath(pathname);
+  if (vendor) return vendor;
   const routed = ROUTES[pathname];
   const rel = routed ?? (pathname.endsWith('/') ? `${pathname}index.html` : pathname);
   const filePath = resolve(ROOT, rel.replace(/^\//, ''));

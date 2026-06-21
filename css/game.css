@@ -63,6 +63,41 @@ body.mobile {
   z-index: 0;
 }
 
+#select-overlay,
+#start-overlay,
+#gameover-overlay,
+.orientation-lock {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.boot-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 50000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  background: #0a0e1a;
+  color: #e8ecf4;
+}
+.boot-fallback[hidden] {
+  display: none !important;
+}
+.boot-fallback button {
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  background: #4f8cff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 #hud {
   position: fixed;
   top: 0;

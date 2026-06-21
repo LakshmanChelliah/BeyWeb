@@ -70,14 +70,25 @@
     </div>
   </div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
-    }
-  }
+  <script>
+    (function () {
+      var useCdn = location.hostname === 'localhost' && location.port === '3000';
+      var imports = useCdn
+        ? {
+            three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+            'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/',
+            'cannon-es': 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js',
+          }
+        : {
+            three: '/vendor/three.module.js',
+            'three/addons/': '/vendor/three/examples/jsm/',
+            'cannon-es': '/vendor/cannon-es.js',
+          };
+      var el = document.createElement('script');
+      el.type = 'importmap';
+      el.textContent = JSON.stringify({ imports: imports });
+      document.head.appendChild(el);
+    })();
   </script>
 
   <script type="module" src="/js/main-pc.js"></script>
