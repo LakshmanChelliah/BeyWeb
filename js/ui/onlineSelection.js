@@ -4,7 +4,7 @@ import { renderBeyPackagingStars } from './beyPackagingStars.js';
 import { MSG } from '../net/protocol.js';
 
 /**
- * Online bey selection: full carousel for you, mystery card for opponent.
+ * Online bey selection: carousel for your pick + opponent ready status.
  */
 export function createOnlineSelection({ root, netClient, onRevealComplete, onPrepareMotion }) {
   const ROSTER = BEYS.filter(isBeyPlayable);
@@ -18,18 +18,14 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
       <div class="online-select-header">
         <h2 class="online-select-title">Choose Your Bey</h2>
         <p class="online-select-hint" id="select-hint">Browse with arrows, then lock in your pick</p>
+        <p class="online-opponent-status" id="rival-status" aria-live="polite">
+          <span class="online-opponent-status-dot" aria-hidden="true"></span>
+          <span class="online-opponent-status-text">Opponent: Choosing…</span>
+        </p>
       </div>
       <div class="online-select-panels">
         <div class="online-select-yours">
-          <p class="online-select-label">You</p>
           <div class="online-carousel-mount"></div>
-        </div>
-        <div class="online-select-rival">
-          <p class="online-select-label">Opponent</p>
-          <div class="online-mystery-card" id="rival-mystery">
-            <div class="mystery-emblem">?</div>
-            <p class="mystery-status" id="rival-status">Choosing…</p>
-          </div>
         </div>
       </div>
       <div class="online-select-actions">
@@ -43,7 +39,7 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
   const lockBtn = root.querySelector('#btn-lock');
   const unlockBtn = root.querySelector('#btn-unlock');
   const rivalStatus = root.querySelector('#rival-status');
-  const mysteryCard = root.querySelector('#rival-mystery');
+  const rivalStatusText = root.querySelector('.online-opponent-status-text');
   const hintEl = root.querySelector('#select-hint');
 
   mount.innerHTML = `
@@ -115,8 +111,11 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
     lockBtn.classList.toggle('locked', locked);
     lockBtn.textContent = locked ? 'Locked In ✓' : 'Lock In';
     unlockBtn.classList.toggle('hidden', !locked || opponentStatus === 'locked');
-    rivalStatus.textContent = opponentStatus === 'locked' ? 'Locked in' : 'Choosing…';
-    mysteryCard.classList.toggle('rival-locked', opponentStatus === 'locked');
+    const oppReady = opponentStatus === 'locked';
+    rivalStatus?.classList.toggle('rival-locked', oppReady);
+    if (rivalStatusText) {
+      rivalStatusText.textContent = oppReady ? 'Opponent: Locked in ✓' : 'Opponent: Choosing…';
+    }
     if (hintEl) {
       if (locked) {
         hintEl.textContent = opponentStatus === 'locked'
@@ -163,14 +162,8 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
   });
 
   netClient.on(MSG.MATCH_CONFIG, (msg) => {
-    mysteryCard.classList.add('revealing');
-    rivalStatus.textContent = 'Revealed!';
-    const oppId = msg.beyIds[1 - netClient.slot];
-    const opp = ROSTER.find((b) => b.id === oppId);
-    if (opp?.logo) {
-      mysteryCard.querySelector('.mystery-emblem').innerHTML =
-        `<img class="bey-emblem-img${opp.id ? ` bey-emblem-img--${opp.id}` : ''}" src="${opp.logo}" alt="${opp.name}" />`;
-    }
+    rivalStatus?.classList.add('revealing');
+    if (rivalStatusText) rivalStatusText.textContent = 'Opponent: Revealed!';
     setTimeout(() => onRevealComplete?.(msg), 1500);
   });
 
