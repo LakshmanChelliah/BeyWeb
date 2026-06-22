@@ -139,17 +139,10 @@ export function createAppBootstrap({
     if (autoRoom && !parseRoomFromUrl()) {
       ensureRoomInUrl(autoRoom);
     }
-    const roomFromUrl = autoRoom ?? parseRoomFromUrl();
 
-    if (onlineStarted && !roomFromUrl && !createAsHost) return;
-
-    if (createAsHost) {
-      netClient.close();
-      onlineStarted = false;
-      if (parseRoomFromUrl()) clearRoomFromUrl();
-    }
-
-    if (onlineStarted && roomFromUrl) return;
+    onlineLobby?.destroy?.();
+    netClient.close();
+    onlineStarted = false;
 
     gameMode = GAME_MODES.ONLINE;
     showOnlineFlow(true);
@@ -175,7 +168,7 @@ export function createAppBootstrap({
         });
       },
     });
-    onlineLobby.start({ autoRoom: roomFromUrl, createAsHost });
+    onlineLobby.start({ autoRoom, createAsHost });
     onlineStarted = true;
   }
 
@@ -297,6 +290,7 @@ export function createAppBootstrap({
       } else {
         onlineStarted = false;
         netClient.close();
+        clearRoomFromUrl();
         showOnlineFlow(false);
         selection?.reset(getPlayers(), { keepCarousel: true });
         selection?.setRivalLabel(getRivalLabel());

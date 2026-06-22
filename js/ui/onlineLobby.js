@@ -10,6 +10,7 @@ function normalizeRoomCode(raw) {
 export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   let hostMsg = null;
   let inRoom = false;
+  const unsubs = [];
 
   root.innerHTML = `
     <div class="online-lobby">
@@ -143,9 +144,10 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   }
 
   function updatePeers(count, { isGuest = false } = {}) {
+    const peers = Number(count) || 1;
     peerYou?.classList.add('connected');
-    peerOpp?.classList.toggle('connected', count >= 2);
-    if (count >= 2) {
+    peerOpp?.classList.toggle('connected', peers >= 2);
+    if (peers >= 2) {
       waitEl.textContent = 'Rival connected — choose your bey when ready';
       showReadyPopup();
     } else {
@@ -210,6 +212,7 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     hostPanel.hidden = false;
     setStatus('Room created — share the code or link');
     showRoomPanel({ isHost: true });
+    hideReadyPopup();
     onRoomJoined?.(msg.roomId);
   }
 
@@ -256,24 +259,25 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   joinBtn.addEventListener('click', () => joinWithCode(joinCodeInput.value));
   createBtn.addEventListener('click', () => createAsHost());
 
-  netClient.on(MSG.PEER_JOINED, (msg) => {
-    updatePeers(msg.peerCount ?? 2, { isGuest: hostPanel.hidden });
-  });
+  unsubs.push(netClient.on(MSG.PEER_JOINED, (msg) => {
+    updatePeers(msg.peerCount, { isGuest: hostPanel.hidden });
+  }));
 
-  netClient.on(MSG.JOINED, () => {
+  unsubs.push(netClient.on(MSG.JOINED, () => {
     setStatus('Joined room');
     showRoomPanel({ isHost: false });
     waitEl.textContent = 'Waiting for opponent to join…';
     peerYou?.classList.add('connected');
-  });
+    hideReadyPopup();
+  }));
 
-  netClient.on(MSG.ROOM_CREATED, (msg) => {
+  unsubs.push(netClient.on(MSG.ROOM_CREATED, (msg) => {
     showHostPanel(msg);
-  });
+  }));
 
-  netClient.on(MSG.ERROR, (msg) => {
+  unsubs.push(netClient.on(MSG.ERROR, (msg) => {
     if (!inRoom) setStatus(msg.message || 'Error');
-  });
+  }));
 
   async function start({ autoRoom = null, createAsHost: hostNow = false } = {}) {
     joinBtn.disabled = true;
@@ -290,11 +294,18 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
         await createAsHost();
         return;
       }
+      joinBtn.disabled = joinCodeInput.value.length < 6;
       setStatus('Join with a code or create a room');
     } catch (err) {
       setStatus(err?.message || 'Could not connect');
     }
   }
 
-  return { start };
+  function destroy() {
+    for (const off of unsubs) off();
+    unsubs.length = 0;
+    hideReadyPopup();
+  }
+
+  return { start, destroy };
 }
