@@ -3,6 +3,7 @@
  * Loaded synchronously in index.html and pc.html before the app boots.
  */
 (function routeEntry() {
+  const base = window.__BEYWEB_BASE__ ?? '';
   const path = location.pathname;
   const onPc = /\/pc\/?$/i.test(path) || /pc\.html$/i.test(path);
   const ua = navigator.userAgent || '';
@@ -13,8 +14,8 @@
   const mobileLike = mobileUa || touchNarrow;
 
   if (!onPc && !mobileLike) {
-    location.replace(`/pc/${location.search}${location.hash}`);
+    location.replace(`${base}/pc.html${location.search}${location.hash}`);
   } else if (onPc && mobileLike) {
-    location.replace(`/${location.search}${location.hash}`);
+    location.replace(`${base}/${location.search}${location.hash}`);
   }
 })();

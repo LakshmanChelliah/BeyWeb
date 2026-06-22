@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CONFIG } from '../config.js';
+import { assetUrl } from '../app/basePath.js';
 import { fitColliderToModel } from '../physics/top.js';
 
 const gltfLoader = new GLTFLoader();
@@ -72,7 +73,7 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
   if (!url) return;
 
   gltfLoader.load(
-    url,
+    assetUrl(url),
     (gltf) => {
       const model = gltf.scene;
       model.traverse((child) => {
