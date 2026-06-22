@@ -9,9 +9,9 @@
         'cannon-es': 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js',
       }
     : {
-        three: 'vendor/three.module.js',
-        'three/addons/': 'vendor/three/examples/jsm/',
-        'cannon-es': 'vendor/cannon-es.js',
+        three: '/vendor/three.module.js',
+        'three/addons/': '/vendor/three/examples/jsm/',
+        'cannon-es': '/vendor/cannon-es.js',
       };
   var el = document.createElement('script');
   el.type = 'importmap';
