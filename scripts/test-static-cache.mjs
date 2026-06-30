@@ -23,7 +23,7 @@ try {
     assert(bareText.includes(`id: '${id}'`), `beys.js missing ${id}`);
   }
 
-  const versioned = await fetch(`http://127.0.0.1:${PORT}/js/game/beys.js?v=17`);
+  const versioned = await fetch(`http://127.0.0.1:${PORT}/js/game/beys.js?v=18`);
   const versionedText = await versioned.text();
   assert(versioned.ok, `GET /js/game/beys.js?v=17 failed: ${versioned.status}`);
   assert(versionedText === bareText, 'versioned beys.js should match bare path body');
