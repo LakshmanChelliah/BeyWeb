@@ -1,5 +1,5 @@
 import { CONFIG } from '../js/config.js';
-import { getBeyById } from '../js/game/beys.js';
+import { getBeyById, isBeyPlayable } from '../js/game/beys.js';
 import {
   createMatchEnvironment,
   serverTick,
@@ -140,7 +140,8 @@ export class Room {
 
   lockBey(slot, beyId) {
     if (this.state !== 'picking' && this.state !== 'waiting') return;
-    if (!getBeyById(beyId)) return;
+    const bey = getBeyById(beyId);
+    if (!isBeyPlayable(bey)) return;
     this.locks[slot] = { beyId, locked: true };
     this.broadcastAll(this.pickStatusPayload());
     if (this.locks[0].locked && this.locks[1].locked) {

@@ -51,10 +51,13 @@ async function main() {
   await once(guest, MSG.JOINED);
   await once(host, MSG.PEER_JOINED);
 
-  host.send(JSON.stringify({ type: MSG.LOCK_BEY, beyId: 'pegasus' }));
-  guest.send(JSON.stringify({ type: MSG.LOCK_BEY, beyId: 'ldrago' }));
+  host.send(JSON.stringify({ type: MSG.LOCK_BEY, beyId: 'striker' }));
+  guest.send(JSON.stringify({ type: MSG.LOCK_BEY, beyId: 'eagle' }));
 
-  await once(host, MSG.MATCH_CONFIG);
+  const matchConfig = await once(host, MSG.MATCH_CONFIG);
+  if (matchConfig.beyIds?.[0] !== 'striker' || matchConfig.beyIds?.[1] !== 'eagle') {
+    throw new Error(`expected striker/eagle, got ${matchConfig.beyIds?.join('/')}`);
+  }
   await once(host, MSG.COUNTDOWN);
 
   // Wait for match to start and send steer input.

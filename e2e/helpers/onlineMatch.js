@@ -52,6 +52,17 @@ export async function joinOnlineRoom(page, roomCode) {
   }, null, { timeout: 15000 });
 }
 
+export async function focusOnlineBeyByName(page, targetName) {
+  const dots = page.locator('.online-carousel-mount .carousel-dot');
+  const count = await dots.count();
+  for (let i = 0; i < count; i++) {
+    const name = (await page.locator('.online-carousel-mount .bey-card.active .bey-name').textContent())?.trim();
+    if (name === targetName) return;
+    await page.locator('.online-carousel-mount .carousel-arrow.right').click();
+  }
+  throw new Error(`${targetName} not found in online carousel`);
+}
+
 export async function setupOnlineMatch(host, guest) {
   await selectOnlineMode(host);
   await waitForE2E(host);
