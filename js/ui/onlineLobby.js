@@ -107,14 +107,29 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   const peerYou = root.querySelector('#peer-you');
   const peerOpp = root.querySelector('#peer-opp');
 
+  /** Inline display overrides broken `[hidden]` + `display:flex` combos on some mobile browsers. */
+  function setPanelVisible(el, visible) {
+    if (!el) return;
+    if (visible) {
+      el.hidden = false;
+      el.style.removeProperty('display');
+      el.removeAttribute('aria-hidden');
+    } else {
+      el.hidden = true;
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   function hideReadyPopup() {
-    readyPopup.hidden = true;
+    setPanelVisible(readyPopup, false);
     continueBtn.disabled = true;
   }
 
   function showReadyPopup() {
+    if (!inRoom) return;
     continueBtn.disabled = false;
-    readyPopup.hidden = false;
+    setPanelVisible(readyPopup, true);
     continueBtn.focus({ preventScroll: true });
   }
 
@@ -124,9 +139,9 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
 
   function showEntryPanel() {
     inRoom = false;
-    entryPanel.hidden = false;
-    roomPanel.hidden = true;
-    hostPanel.hidden = true;
+    setPanelVisible(entryPanel, true);
+    setPanelVisible(roomPanel, false);
+    setPanelVisible(hostPanel, false);
     hideReadyPopup();
     peerYou?.classList.remove('connected');
     peerOpp?.classList.remove('connected');
@@ -134,9 +149,9 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
 
   function showRoomPanel({ isHost = false } = {}) {
     inRoom = true;
-    entryPanel.hidden = true;
-    roomPanel.hidden = false;
-    hostPanel.hidden = !isHost;
+    setPanelVisible(entryPanel, false);
+    setPanelVisible(roomPanel, true);
+    setPanelVisible(hostPanel, isHost);
     peerYou?.classList.add('connected');
     if (!isHost) {
       waitEl.textContent = 'Waiting for opponent to join…';
@@ -144,6 +159,7 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
   }
 
   function updatePeers(count, { isGuest = false } = {}) {
+    if (!inRoom) return;
     const peers = Number(count) || 1;
     peerYou?.classList.add('connected');
     peerOpp?.classList.toggle('connected', peers >= 2);
@@ -209,7 +225,7 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     const url = joinUrl(msg.roomId);
     linkInput.value = url;
     roomCodeEl.textContent = msg.roomId;
-    hostPanel.hidden = false;
+    setPanelVisible(hostPanel, true);
     setStatus('Room created — share the code or link');
     showRoomPanel({ isHost: true });
     hideReadyPopup();
