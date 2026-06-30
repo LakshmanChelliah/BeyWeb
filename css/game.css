@@ -1870,6 +1870,14 @@ body.mobile .pick-bey {
   gap: 14px;
 }
 
+/* `display:flex` on lobby panels overrides the HTML hidden attribute without this. */
+.online-lobby-entry[hidden],
+.online-lobby-room[hidden],
+.online-lobby-share[hidden],
+.online-ready-popup[hidden] {
+  display: none !important;
+}
+
 .online-join-block {
   width: 100%;
   padding: 16px;

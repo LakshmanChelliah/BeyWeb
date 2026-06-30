@@ -8,6 +8,8 @@ export function createNetClient({ onMessage, onStatus } = {}) {
   let slot = null;
   let roomId = null;
   let connected = false;
+  let lastSnapshotTick = 0;
+  let snapshotCount = 0;
   const handlers = new Map();
 
   function emit(type, data) {
@@ -48,6 +50,10 @@ export function createNetClient({ onMessage, onStatus } = {}) {
         if (msg.type === MSG.JOINED || msg.type === MSG.ROOM_CREATED) {
           slot = msg.slot;
           roomId = msg.roomId;
+        }
+        if (msg.type === MSG.SNAPSHOT) {
+          snapshotCount += 1;
+          if (msg.tick != null) lastSnapshotTick = msg.tick;
         }
         emit(msg.type, msg);
       };
@@ -196,5 +202,7 @@ export function createNetClient({ onMessage, onStatus } = {}) {
     get roomId() { return roomId; },
     get connected() { return connected; },
     get wsOpen() { return ws?.readyState === WebSocket.OPEN; },
+    get lastSnapshotTick() { return lastSnapshotTick; },
+    get snapshotCount() { return snapshotCount; },
   };
 }

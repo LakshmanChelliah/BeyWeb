@@ -46,6 +46,31 @@ export const MSG = Object.freeze({
   PONG: 'pong',
 });
 
+/** Game server when static host cannot serve WebSockets (e.g. GitHub Pages). */
+export const SPLIT_HOST_GAME_WS = 'wss://beyweb-production.up.railway.app';
+
+function normalizeWsUrl(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  if (/^wss?:\/\//i.test(trimmed)) return trimmed;
+  const secure = typeof location !== 'undefined' && location.protocol === 'https:';
+  return `${secure ? 'wss' : 'ws'}://${trimmed.replace(/^\/\//, '')}`;
+}
+
+function splitStaticGameWs() {
+  if (typeof window !== 'undefined' && window.__BEYWEB_WS__) {
+    return normalizeWsUrl(window.__BEYWEB_WS__);
+  }
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector('meta[name="beyweb-game-server"]');
+    if (meta?.content) return normalizeWsUrl(meta.content);
+  }
+  if (typeof location !== 'undefined' && location.hostname.endsWith('github.io')) {
+    return SPLIT_HOST_GAME_WS;
+  }
+  return null;
+}
+
 export function wsUrl(host, port = DEV_WS_PORT) {
   if (typeof location !== 'undefined') {
     const secure = location.protocol === 'https:';
@@ -54,6 +79,8 @@ export function wsUrl(host, port = DEV_WS_PORT) {
     if (location.port === String(DEV_STATIC_PORT)) {
       return `${proto}://${location.hostname}:${port}`;
     }
+    const splitWs = splitStaticGameWs();
+    if (splitWs) return splitWs;
     // Production: one process serves HTTP + WSS on the same host (npm start).
     return `${proto}://${location.host}`;
   }

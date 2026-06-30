@@ -335,6 +335,7 @@ export class Room {
     this.tick = 0;
     this.state = 'playing';
     this.touchAllPlayerActivity();
+    if (this.match?.state) this.match.state.gameRunning = true;
     this.startGameLoop();
   }
 

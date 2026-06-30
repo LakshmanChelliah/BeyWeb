@@ -57,14 +57,24 @@ async function main() {
   await once(host, MSG.MATCH_CONFIG);
   await once(host, MSG.COUNTDOWN);
 
+  // Wait for match to start and send steer input.
+  await wait(4500);
+  host.send(JSON.stringify({
+    type: MSG.INPUT,
+    tick: 1,
+    steer: { x: 0.8, y: 0.3 },
+  }));
+
   let snapshots = 0;
+  let sawInputTick = false;
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('not enough snapshots')), 12000);
     function onSnap(raw) {
       const msg = JSON.parse(raw.toString());
       if (msg.type === MSG.SNAPSHOT) {
         snapshots += 1;
-        if (snapshots >= 20) {
+        if (msg.tick > 60) sawInputTick = true;
+        if (snapshots >= 20 && sawInputTick) {
           clearTimeout(t);
           host.off('message', onSnap);
           resolve();

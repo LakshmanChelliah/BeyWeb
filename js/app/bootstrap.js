@@ -5,7 +5,7 @@ import { createPlaySetup } from '../ui/playSetup.js';
 import { queryGameUi } from '../ui/domRefs.js';
 import { createCampaignController } from '../game/campaignController.js';
 import { createOnlineController } from '../game/onlineController.js';
-import { createOnlineLobby } from '../ui/onlineLobby.js';
+import { createOnlineLobby } from '../ui/onlineLobby.js?v=16';
 import { createOnlineSelection } from '../ui/onlineSelection.js';
 import { createNetClient } from '../net/client.js';
 import { createInputBuffer } from '../net/inputBuffer.js';
@@ -375,6 +375,11 @@ export function createAppBootstrap({
           hasArenaBodies: !!(gameRef?.state.playerBody && gameRef?.state.aiBody),
           onlineActive: onlineCtrl.isActive(),
           onlineMotion: gameRef?.getOnlineMotionStats?.() ?? null,
+          lastServerTick: Math.max(
+            gameRef?.getLastServerTick?.() ?? 0,
+            netClient.lastSnapshotTick ?? 0
+          ),
+          snapshotCount: netClient.snapshotCount ?? 0,
         };
       },
       tearDownMatch() {
