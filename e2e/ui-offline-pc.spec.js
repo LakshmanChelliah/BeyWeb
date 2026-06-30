@@ -22,7 +22,7 @@ test.describe('PC offline UI', () => {
 
     await clickMode(page, 'Online');
     await expect(page.locator('#online-flow')).not.toHaveClass(/hidden/);
-    await expect(page.getByText(/Join with room code|share code or link/i)).toBeVisible();
+    await expect(page.getByText(/Join with room code|share code or link/i).first()).toBeVisible();
     await expect(page.locator('.select-mount')).toBeHidden();
 
     await clickMode(page, 'Tournament');
