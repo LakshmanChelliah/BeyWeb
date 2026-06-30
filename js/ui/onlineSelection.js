@@ -1,4 +1,5 @@
-import { BEYS, isBeyPlayable } from '../game/beys.js';
+import { BEYS, isBeyPlayable } from '../game/beys.js?v=17';
+import { assetUrl } from '../app/basePath.js';
 import { renderBeyPackagingStars } from './beyPackagingStars.js';
 import { MSG } from '../net/protocol.js';
 
@@ -66,7 +67,7 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
 
   function emblemBlock(bey) {
     if (bey.logo) {
-      return `<img class="bey-emblem-img${bey.id ? ` bey-emblem-img--${bey.id}` : ''}" src="${bey.logo}" alt="" />`;
+      return `<img class="bey-emblem-img${bey.id ? ` bey-emblem-img--${bey.id}` : ''}" src="${assetUrl(bey.logo)}" alt="" />`;
     }
     return `<span>${bey.name.charAt(0)}</span>`;
   }

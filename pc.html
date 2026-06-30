@@ -11,6 +11,7 @@
       else if (/\/[^/]+\.html$/i.test(p)) p = p.replace(/\/[^/]+\.html$/i, '');
       if (!p.endsWith('/')) p += '/';
       window.__BEYWEB_BASE__ = p === '/' ? '' : p.replace(/\/$/, '');
+      window.__BEYWEB_ASSET_V__ = '17';
       if (location.hostname.endsWith('github.io')) {
         window.__BEYWEB_WS__ = 'wss://beyweb-production.up.railway.app';
       }
@@ -19,9 +20,9 @@
       document.head.appendChild(base);
     })();
   </script>
-  <script src="js/net/entryRoute.js"></script>
-  <script src="js/head-boot.js"></script>
-  <link rel="stylesheet" href="css/game.css?v=16" />
+  <script src="js/net/entryRoute.js?v=17"></script>
+  <script src="js/head-boot.js?v=17"></script>
+  <link rel="stylesheet" href="css/game.css?v=17" />
 </head>
 <body>
 
@@ -86,6 +87,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/main-pc.js?v=14"></script>
+  <script type="module" src="js/main-pc.js?v=17"></script>
 </body>
 </html>
