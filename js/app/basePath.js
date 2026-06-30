@@ -15,9 +15,14 @@ export function computeAppBasePath() {
 }
 
 /** Resolve a repo-root asset path for static (/BeyWeb) and server (/ ) hosts. */
-export function assetUrl(path) {
+export function assetUrl(path, { versioned = true } = {}) {
   if (!path || /^https?:\/\//i.test(path)) return path;
   const rel = path.startsWith('/') ? path.slice(1) : path;
   const base = appBasePath();
-  return base ? `${base}/${rel}` : `/${rel}`;
+  let url = base ? `${base}/${rel}` : `/${rel}`;
+  if (versioned && typeof window !== 'undefined' && window.__BEYWEB_ASSET_V__) {
+    const v = window.__BEYWEB_ASSET_V__;
+    url += url.includes('?') ? `&v=${v}` : `?v=${v}`;
+  }
+  return url;
 }

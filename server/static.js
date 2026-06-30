@@ -1,5 +1,5 @@
 import { readFile, stat } from 'fs/promises';
-import { join, extname, resolve, sep } from 'path';
+import { extname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -38,6 +38,14 @@ const VENDOR_PREFIX = {
   '/vendor/three/examples/jsm/': 'node_modules/three/examples/jsm/',
 };
 
+/** Game code must revalidate after deploys; large media can stay cached. */
+function cacheControlFor(ext) {
+  if (ext === '.html' || ext === '.js' || ext === '.mjs' || ext === '.css' || ext === '.json') {
+    return 'no-cache, must-revalidate';
+  }
+  return 'public, max-age=86400';
+}
+
 function resolveVendorPath(pathname) {
   const exact = VENDOR_EXACT[pathname];
   if (exact) return resolve(ROOT, exact);
@@ -64,6 +72,10 @@ function resolveStaticPath(pathname) {
   return filePath;
 }
 
+function etagFor(info) {
+  return `"${info.mtimeMs.toString(36)}-${info.size.toString(36)}"`;
+}
+
 /** @returns {Promise<boolean>} true if a response was sent */
 export async function tryServeStatic(req, res) {
   const url = new URL(req.url ?? '/', 'http://local');
@@ -77,11 +89,21 @@ export async function tryServeStatic(req, res) {
   try {
     const info = await stat(filePath);
     if (!info.isFile()) return false;
-    const data = await readFile(filePath);
     const ext = extname(filePath).toLowerCase();
+    const etag = etagFor(info);
+    const cacheControl = cacheControlFor(ext);
+
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
+      res.end();
+      return true;
+    }
+
+    const data = await readFile(filePath);
     res.writeHead(200, {
       'Content-Type': MIME[ext] ?? 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
+      'Cache-Control': cacheControl,
+      ETag: etag,
     });
     res.end(data);
     return true;

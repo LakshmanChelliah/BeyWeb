@@ -1,5 +1,6 @@
-import { BEYS, isBeyPlayable } from '../game/beys.js';
+import { BEYS, isBeyPlayable } from '../game/beys.js?v=17';
 import { ABILITY_REGISTRY } from '../game/abilities.js';
+import { assetUrl } from '../app/basePath.js';
 import { renderBeyPackagingStars } from './beyPackagingStars.js';
 
 /**
@@ -83,7 +84,7 @@ export function createBeySelection({ root, players, onComplete, rivalLabel = nul
 
   const emblemBlock = (bey) => {
     if (bey.logo) {
-      return `<img class="bey-emblem-img${bey.id ? ` bey-emblem-img--${bey.id}` : ''}" src="${bey.logo}" alt="" />`;
+      return `<img class="bey-emblem-img${bey.id ? ` bey-emblem-img--${bey.id}` : ''}" src="${assetUrl(bey.logo)}" alt="" />`;
     }
     const letter = isBeyPlayable(bey) ? bey.name.charAt(0) : '?';
     return `<span>${letter}</span>`;
