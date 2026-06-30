@@ -24,8 +24,8 @@ import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera, resetMobileCameraFraming, snapArenaCamera } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
-import { createTopGroups, loadTopModel, setTopEmissive } from '../render/top.js';
-import { beyColorHex, getBeyOrDefault } from './beys.js?v=21';
+import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js';
+import { beyColorHex, getBeyOrDefault } from './beys.js?v=22';
 import {
   createAbilityRuntime,
   triggerAbility as triggerAbilityCore,
@@ -46,7 +46,7 @@ import {
   isLibraBusterChannelingBody,
   SPECIAL_LOGO_FLASH_DUR,
   ABILITY_REGISTRY,
-} from './abilities.js?v=21';
+} from './abilities.js?v=22';
 import { stepSimulation } from './simulation.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
@@ -355,6 +355,9 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       state.aiBody = null;
     }
     state.abilities = null;
+    invalidateTopModelLoads(playerGroup, aiGroup);
+    playerGroup.clear();
+    aiGroup.clear();
     for (const container of Object.values(dom.abilityBars)) {
       container?.classList.remove('visible');
       if (container) container.innerHTML = '';
@@ -395,6 +398,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       state.aiBody = null;
     }
     state.abilities = null;
+    invalidateTopModelLoads(playerGroup, aiGroup);
     playerGroup.clear();
     aiGroup.clear();
     for (const container of Object.values(dom.abilityBars)) {
@@ -713,6 +717,26 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     input.onMatchEnd?.(result);
   }
 
+  function ensureTopVisuals() {
+    if (!state.playerBody || !state.aiBody) return;
+    if (playerGroup.children.length === 0 && state.playerBey) {
+      loadTopModel(
+        state.playerBey.model,
+        beyColorHex(state.playerBey.color),
+        playerGroup,
+        state.playerBody
+      );
+    }
+    if (aiGroup.children.length === 0 && state.aiBey) {
+      loadTopModel(
+        state.aiBey.model,
+        beyColorHex(state.aiBey.color),
+        aiGroup,
+        state.aiBody
+      );
+    }
+  }
+
   function spawnTops() {
     resetStarBlastCamera();
     resetMobileCameraFraming();
@@ -794,6 +818,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     // Always bind visuals to sim groups/bodies (player=slot0, ai=slot1).
     loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
     loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
+    ensureTopVisuals();
     snapArenaCamera(camera, state, mode);
   }
 
@@ -956,6 +981,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     }
 
     updateAbilityVisuals();
+
+    ensureTopVisuals();
 
     if (state.playerBody) {
       state.playerVisualYaw = syncTopVisual(

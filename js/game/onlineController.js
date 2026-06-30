@@ -1,5 +1,5 @@
-import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=21';
-import { getBeyOrDefault } from './beys.js';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=22';
+import { getBeyOrDefault } from './beys.js?v=22';
 
 function winnerToSlot(winner) {
   if (winner === 1) return 0;
@@ -217,6 +217,16 @@ export function createOnlineController({
     document.getElementById('countdown-overlay')?.classList.remove('visible', 'countdown-overlay--rip');
   }
 
+  function isLiveArena(gameRef) {
+    const state = gameRef?.state;
+    return Boolean(
+      state?.gameRunning &&
+      !state?.gameFrozen &&
+      state?.playerBody &&
+      state?.aiBody
+    );
+  }
+
   function prepareCountdownArena(gameRef) {
     if (countdownArenaPrepared) return;
     countdownArenaPrepared = true;
@@ -289,10 +299,14 @@ export function createOnlineController({
       if (!canShowCountdown()) return;
 
       if (msg.seconds > 0) {
+        // Ignore stale/resync countdown ticks once the round is live — they wipe spawned beys.
+        if (isLiveArena(gameRef)) return;
         prepareCountdownArena(gameRef);
         showCountdown(msg.seconds);
         return;
       }
+
+      if (isLiveArena(gameRef) && roundStartCommitted) return;
 
       showCountdown(msg.seconds);
       countdownArenaPrepared = false;

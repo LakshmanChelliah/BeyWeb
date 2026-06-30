@@ -10,11 +10,11 @@ import {
   updateTopCollisions,
 } from '../physics/top.js';
 import { createGameState, resetRoundState } from './state.js';
-import { createAbilityRuntime } from './abilities.js?v=21';
-import { beyColorHex } from './beys.js?v=21';
+import { createAbilityRuntime } from './abilities.js?v=22';
+import { beyColorHex } from './beys.js?v=22';
 import { createSeededRng, hashSeed } from '../utils/seededRng.js';
 import { applySteerForce } from '../physics/steer.js';
-import { triggerAbility as triggerAbilityCore } from './abilities.js?v=21';
+import { triggerAbility as triggerAbilityCore } from './abilities.js?v=22';
 import { stepSimulation } from './simulation.js';
 import { decaySpin, stepSleepOutTimers } from '../physics/top.js';
 import {
@@ -28,10 +28,10 @@ import {
   tickBullAbilityVisuals,
   tickStrikerAbilityVisuals,
   tickEagleAbilityVisuals,
-} from './abilities.js?v=21';
+} from './abilities.js?v=22';
 import { evaluateWin } from './rules.js';
 import { beginRingOut, isRingOutCinematicDone } from '../physics/ringOut.js';
-import { clearAbilityFlags } from './abilities.js?v=21';
+import { clearAbilityFlags } from './abilities.js?v=22';
 
 const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true, normalize: false };
 
