@@ -1,4 +1,4 @@
-import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=21';
 import { getBeyOrDefault } from './beys.js';
 
 function winnerToSlot(winner) {
