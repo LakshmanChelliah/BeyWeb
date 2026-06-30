@@ -2,7 +2,7 @@
   var useCdn =
     (location.hostname === 'localhost' && location.port === '3000') ||
     location.hostname.endsWith('github.io');
-  var v = window.__BEYWEB_ASSET_V__ || '18';
+  var v = window.__BEYWEB_ASSET_V__ || '19';
   var base = window.__BEYWEB_BASE__ || '';
 
   function ver(relFromRoot) {
@@ -38,6 +38,7 @@
     './game/modes.js': ver('/js/game/modes.js'),
     './net/remoteInput.js': ver('/js/net/remoteInput.js'),
     './net/inputBuffer.js': ver('/js/net/inputBuffer.js'),
+    './config.js': ver('/js/config.js'),
   };
   scopes[scopePrefix('/js/app')] = {
     '../game/engine.js': ver('/js/game/engine.js'),
@@ -61,6 +62,56 @@
     '../app/basePath.js': ver('/js/app/basePath.js'),
     './beyPackagingStars.js': ver('/js/ui/beyPackagingStars.js'),
     '../net/protocol.js': ver('/js/net/protocol.js'),
+    '../input/ai.js': ver('/js/input/ai.js'),
+    '../game/modes.js': ver('/js/game/modes.js'),
+  };
+  scopes[scopePrefix('/js/game')] = {
+    './abilities.js': ver('/js/game/abilities.js'),
+    './abilities/index.js': ver('/js/game/abilities/index.js'),
+    './beys.js': ver('/js/game/beys.js'),
+    './state.js': ver('/js/game/state.js'),
+    './rules.js': ver('/js/game/rules.js'),
+    './simulation.js': ver('/js/game/simulation.js'),
+    './engine.js': ver('/js/game/engine.js'),
+    './matchFactory.js': ver('/js/game/matchFactory.js'),
+    './modes.js': ver('/js/game/modes.js'),
+    './stats.js': ver('/js/game/stats.js'),
+    './casualMode.js': ver('/js/game/casualMode.js'),
+    './campaign.js': ver('/js/game/campaign.js'),
+    './campaignController.js': ver('/js/game/campaignController.js'),
+    './onlineController.js': ver('/js/game/onlineController.js'),
+    '../config.js': ver('/js/config.js'),
+    '../physics/world.js': ver('/js/physics/world.js'),
+    '../physics/arena.js': ver('/js/physics/arena.js'),
+    '../physics/contact.js': ver('/js/physics/contact.js'),
+    '../physics/top.js': ver('/js/physics/top.js'),
+    '../physics/ringOut.js': ver('/js/physics/ringOut.js'),
+    '../physics/steer.js': ver('/js/physics/steer.js'),
+    '../physics/arenaGeometry.js': ver('/js/physics/arenaGeometry.js'),
+    '../physics/collisionSparks.js': ver('/js/physics/collisionSparks.js'),
+    '../render/scene.js': ver('/js/render/scene.js'),
+    '../render/arena.js': ver('/js/render/arena.js'),
+    '../render/top.js': ver('/js/render/top.js'),
+    '../render/starBlastVfx.js': ver('/js/render/starBlastVfx.js'),
+    '../render/leoneAbilityVfx.js': ver('/js/render/leoneAbilityVfx.js'),
+    '../render/pegasusSpeedBoostVfx.js': ver('/js/render/pegasusSpeedBoostVfx.js'),
+    '../render/ldragoAbilityVfx.js': ver('/js/render/ldragoAbilityVfx.js'),
+    '../render/darkMoveVfx.js': ver('/js/render/darkMoveVfx.js'),
+    '../render/libraAbilityVfx.js': ver('/js/render/libraAbilityVfx.js'),
+    '../render/bullAbilityVfx.js': ver('/js/render/bullAbilityVfx.js'),
+    '../render/eagleAbilityVfx.js': ver('/js/render/eagleAbilityVfx.js'),
+    '../render/strikerAbilityVfx.js': ver('/js/render/strikerAbilityVfx.js'),
+    '../render/collisionSparksVfx.js': ver('/js/render/collisionSparksVfx.js'),
+    '../net/snapshot.js': ver('/js/net/snapshot.js'),
+    '../net/interpolation.js': ver('/js/net/interpolation.js'),
+    '../net/collisionSync.js': ver('/js/net/collisionSync.js'),
+    '../net/protocol.js': ver('/js/net/protocol.js'),
+    '../utils/seededRng.js': ver('/js/utils/seededRng.js'),
+    '../utils/math.js': ver('/js/utils/math.js'),
+  };
+  scopes[scopePrefix('/js/game/abilities')] = {
+    './impl.js': ver('/js/game/abilities/impl.js'),
+    './index.js': ver('/js/game/abilities/index.js'),
   };
 
   var el = document.createElement('script');

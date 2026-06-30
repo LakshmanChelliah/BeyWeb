@@ -15,7 +15,7 @@
       else if (/\/[^/]+\.html$/i.test(p)) p = p.replace(/\/[^/]+\.html$/i, '');
       if (!p.endsWith('/')) p += '/';
       window.__BEYWEB_BASE__ = p === '/' ? '' : p.replace(/\/$/, '');
-      window.__BEYWEB_ASSET_V__ = '18';
+      window.__BEYWEB_ASSET_V__ = '19';
       if (location.hostname.endsWith('github.io')) {
         window.__BEYWEB_WS__ = 'wss://beyweb-production.up.railway.app';
       }
@@ -24,11 +24,11 @@
       document.head.appendChild(base);
     })();
   </script>
-  <script src="js/net/entryRoute.js?v=18"></script>
-  <script src="js/head-boot.js?v=18"></script>
+  <script src="js/net/entryRoute.js?v=19"></script>
+  <script src="js/head-boot.js?v=19"></script>
   <link rel="manifest" href="manifest.json" />
   <title>Spin Sumo | Beyblade Arena</title>
-  <link rel="stylesheet" href="css/game.css?v=18" />
+  <link rel="stylesheet" href="css/game.css?v=19" />
 </head>
 <body class="mobile">
 
@@ -97,6 +97,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/main-mobile.js?v=18"></script>
+  <script type="module" src="js/main-mobile.js?v=19"></script>
 </body>
 </html>
