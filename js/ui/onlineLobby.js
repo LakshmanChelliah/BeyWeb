@@ -1,4 +1,4 @@
-import { joinUrl, MSG } from '../net/protocol.js?v=22';
+import { joinUrl, MSG } from '../net/protocol.js?v=23';
 
 function normalizeRoomCode(raw) {
   return String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);

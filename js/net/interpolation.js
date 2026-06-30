@@ -1,4 +1,4 @@
-import { TICK_RATE } from './protocol.js?v=22';
+import { TICK_RATE } from './protocol.js?v=23';
 
 export const SNAP_EPS = 2.5;
 const TICK_MS = 1000 / TICK_RATE;

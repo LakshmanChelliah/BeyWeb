@@ -1,5 +1,4 @@
-import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=22';
-import { getBeyOrDefault } from './beys.js?v=22';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=23';
 
 function winnerToSlot(winner) {
   if (winner === 1) return 0;
@@ -39,6 +38,8 @@ export function createOnlineController({
   let countdownArenaPrepared = false;
 
   let roundStartCommitted = false;
+  let matchConfigReceived = false;
+  let pendingCountdownGo = false;
   let readyStatusEl = document.getElementById('gameover-ready');
 
   function usesReadyGate() {
@@ -65,6 +66,8 @@ export function createOnlineController({
     countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
+    matchConfigReceived = false;
+    pendingCountdownGo = false;
     updateHud();
     updateRecalibrateVisibility();
   }
@@ -80,6 +83,8 @@ export function createOnlineController({
     countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
+    matchConfigReceived = false;
+    pendingCountdownGo = false;
     campaignHud?.classList.add('hidden');
     hideCountdown();
     paintReadyStatus();
@@ -285,14 +290,22 @@ export function createOnlineController({
     return true;
   }
 
+  function beginRoundFromCountdown(gameRef) {
+    showCountdown(0);
+    countdownArenaPrepared = false;
+    tryStartNextRound(gameRef);
+  }
+
   function wireNetHandlers(gameRef) {
     netClient.on(MSG.MATCH_CONFIG, (msg) => {
+      const resumeGo = pendingCountdownGo;
       const slot = netClient.slot ?? 0;
       start(slot);
       scores = msg.scores ?? [0, 0];
-      gameRef.state.playerBey = getBeyOrDefault(msg.beyIds?.[0], 'pegasus');
-      gameRef.state.aiBey = getBeyOrDefault(msg.beyIds?.[1], 'ldrago');
+      matchConfigReceived = true;
+      gameRef.applyOnlineMatchConfig?.(msg);
       updateHud();
+      if (resumeGo) beginRoundFromCountdown(gameRef);
     });
 
     netClient.on(MSG.COUNTDOWN, (msg) => {
@@ -308,9 +321,13 @@ export function createOnlineController({
 
       if (isLiveArena(gameRef) && roundStartCommitted) return;
 
-      showCountdown(msg.seconds);
-      countdownArenaPrepared = false;
-      tryStartNextRound(gameRef);
+      if (!matchConfigReceived) {
+        pendingCountdownGo = true;
+        showCountdown(msg.seconds);
+        return;
+      }
+
+      beginRoundFromCountdown(gameRef);
     });
 
     netClient.on(MSG.SNAPSHOT, (msg) => {
@@ -454,6 +471,8 @@ export function createOnlineController({
       readyCount,
       localReady,
       roundStartCommitted,
+      matchConfigReceived,
+      pendingCountdownGo,
     };
   }
 
