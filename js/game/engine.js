@@ -842,6 +842,9 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     setNetRtt(ms) {
       netInterpolator.setRtt(ms);
     },
+    getLastServerTick() {
+      return lastServerTick;
+    },
     playerGroup,
     aiGroup,
   };

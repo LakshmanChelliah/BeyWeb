@@ -374,6 +374,11 @@ export function createAppBootstrap({
           restartDisabled: btn?.disabled ?? false,
           hasArenaBodies: !!(gameRef?.state.playerBody && gameRef?.state.aiBody),
           onlineActive: onlineCtrl.isActive(),
+          lastServerTick: Math.max(
+            gameRef?.getLastServerTick?.() ?? 0,
+            netClient.lastSnapshotTick ?? 0
+          ),
+          snapshotCount: netClient.snapshotCount ?? 0,
         };
       },
       tearDownMatch() {

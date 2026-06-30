@@ -1,6 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
 const isCI = !!process.env.CI;
+/** Unified game + WebSocket port (mirrors production `npm start`). */
+const E2E_PORT = 8090;
 
 export default defineConfig({
   testDir: './e2e',
@@ -14,22 +16,15 @@ export default defineConfig({
     ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
     : 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${E2E_PORT}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  webServer: [
-    {
-      command: 'node server/index.js',
-      env: { ...process.env, ENABLE_E2E: '1' },
-      port: 3001,
-      reuseExistingServer: !isCI,
-    },
-    {
-      command: 'npx serve . -p 3000',
-      port: 3000,
-      reuseExistingServer: !isCI,
-    },
-  ],
+  webServer: {
+    command: 'node server/index.js',
+    env: { ...process.env, PORT: String(E2E_PORT), ENABLE_E2E: '1' },
+    port: E2E_PORT,
+    reuseExistingServer: !isCI,
+  },
 });
