@@ -28,4 +28,18 @@ test.describe('Bey carousel UI', () => {
     await page.locator('.carousel-arrow.right').click();
     await expect(page.locator('.carousel-dot.on')).toHaveCount(1);
   });
+
+  test('classic roster beys appear in carousel', async ({ page }) => {
+    const names = new Set();
+    const dots = page.locator('.carousel-dot');
+    const count = await dots.count();
+    expect(count).toBeGreaterThanOrEqual(8);
+    for (let i = 0; i < count; i++) {
+      names.add((await page.locator('.bey-card.active .bey-name').textContent())?.trim());
+      await page.locator('.carousel-arrow.right').click();
+    }
+    expect(names.has('RAY STRIKER')).toBe(true);
+    expect(names.has('EARTH EAGLE')).toBe(true);
+    expect(names.has('LIGHTNING L-DRAGO')).toBe(true);
+  });
 });

@@ -46,11 +46,36 @@ export const BEYS = Object.freeze([
     available: true,
   },
   {
-    id: 'ldrago',
+    id: 'lightning_ldrago',
+    name: 'LIGHTNING L-DRAGO',
+    type: 'Attack',
+    desc: 'Ryuga\'s original left-spin dragon. Upper Mode unleashes devastating smash strikes; Soaring Destruction calls lightning from above.',
+    // Lightning fusion wheel, L-Drago I energy ring (no rubber), 100 track, HF (Hole Flat) tip.
+    // Hasbro BB-43 card stars: Attack 5 / Defense 2 / Stamina 0.
+    leftSpin: true,
+    packagingStars: { atk: 5, def: 2, sta: 0 },
+    atk: 83,
+    move: 87,
+    def: 28,
+    sta: 28,
+    color: '#5B21D9',
+    model: 'lightning_ldrago.glb',
+    logo: 'ldrago_logo.png',
+    gimmicks: {
+      power: 'ldrago_upper_mode',
+      special: 'ldrago_soaring_destruction',
+      passive: null,
+    },
+    available: true,
+  },
+  {
+    id: 'meteo_ldrago',
     name: 'METEO L-DRAGO',
     type: 'Attack',
-    desc: 'Left-spin dragon. Activate Spin Steal to drain the opponent\'s spin on every clash.',
-    // Meteo wheel, L-Drago II rubber ring (spin-steal), LF left-flat tip
+    desc: 'Ryuga\'s evolved left-spin dragon. Spin Steal drains rivals on every clash; Absorb Break coils and devours their spin in a crimson dragon rush.',
+    // Meteo fusion wheel, L-Drago II rubber ring (spin-steal), LF left-flat tip.
+    // Hasbro BB-88 card stars: Attack 4 / Defense 2 / Stamina 3.
+    leftSpin: true,
     packagingStars: { atk: 4, def: 2, sta: 3 },
     atk: 77,
     move: 85,
@@ -61,7 +86,7 @@ export const BEYS = Object.freeze([
     logo: 'updatedLdragoLogo.png',
     gimmicks: {
       power: 'ldrago_spin_steal',
-      special: 'ldrago_supreme_flight',
+      special: 'ldrago_absorb_break',
       passive: null,
     },
     available: true,
@@ -96,6 +121,7 @@ export const BEYS = Object.freeze([
     // Flame (ATK ** DEF * STA **), Libra ring, 145 track (STA **), ES tip (STA *****)
     packagingStars: { atk: 2, def: 1, sta: 5 },
     atk: 42,
+    move: 18,
     def: 28,
     sta: 88,
     color: '#84cc16',
@@ -118,18 +144,50 @@ export const BEYS = Object.freeze([
     sta: null,
     color: '#4b5563',
     model: 'flame_sagittario.glb',
-    available: true,
+    available: false,
   },
   {
     id: 'eagle',
-    name: '???',
-    type: '???',
-    desc: 'This bey is not available yet.',
-    atk: null,
-    def: null,
-    sta: null,
-    color: '#4b5563',
+    name: 'EARTH EAGLE',
+    type: 'Balance',
+    desc: 'Tsubasa\'s balanced sky hunter. Earth wheel and WD tip favor defense and stamina while the Eagle ring keeps movement controlled.',
+    // Earth wheel + Eagle/Aquila energy ring + 145 track + WD (Wide Defense) tip.
+    packagingStars: { atk: 2, def: 4, sta: 4 },
+    atk: 38,
+    move: 34,
+    orbitDrift: 0.35,  // WD tip creates natural wide sweeping arcs
+    def: 72,
+    sta: 78,
+    color: '#6d28d9',
     model: 'earth_eagle.glb',
+    logo: 'earth_eagle_logo.png',
+    gimmicks: {
+      power: 'eagle_counter_stance',
+      special: 'eagle_diving_crush',
+      passive: null,
+    },
+    available: true,
+  },
+  {
+    id: 'striker',
+    name: 'RAY STRIKER',
+    type: 'Attack',
+    desc: 'Masamune\'s blitz striker. Ray wheel and CS tip carve sharp angles; Lightning Sword Flash vanishes and pierces rivals.',
+    // Ray wheel (ATK ***), Unicorno ring (ATK ****), D125 track, CS Control Sharp tip.
+    // Hasbro BB-99 card: Attack 5 / Defense 1 / Stamina 2.
+    packagingStars: { atk: 5, def: 1, sta: 2 },
+    atk: 81,
+    move: 90,
+    def: 26,
+    sta: 30,
+    color: '#14b8a6',
+    model: 'ray_striker.glb',
+    logo: 'ray_striker_logo.png',
+    gimmicks: {
+      power: 'striker_blitz_charge',
+      special: 'striker_lightning_flash',
+      passive: null,
+    },
     available: true,
   },
   {
@@ -140,7 +198,7 @@ export const BEYS = Object.freeze([
     // Bull / Dark wheel (ATK ***), Bull ring, 145 track, HF hole flat
     packagingStars: { atk: 4, def: 2, sta: 3 },
     atk: 70,
-    move: 18, // steering matches Rock Leone; atk still drives knockback
+    move: 42, // faster steer than Libra; atk still drives knockback
     def: 38,
     sta: 34,
     color: '#dc2626',
@@ -156,7 +214,8 @@ export const BEYS = Object.freeze([
 ]);
 
 export function getBeyById(id) {
-  return BEYS.find((b) => b.id === id) || null;
+  const resolved = id === 'ldrago' ? 'meteo_ldrago' : id;
+  return BEYS.find((b) => b.id === resolved) || null;
 }
 
 /** Resolve roster entry; falls back when id is missing or unknown. */

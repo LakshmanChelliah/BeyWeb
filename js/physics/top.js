@@ -180,6 +180,9 @@ export function syncTopVisual(group, body, spinPct, visualYaw, dt, spinSign = 1,
     body.position.z + flightOffsetZ
   );
 
+  const vanish = body.userData.topVanish ?? 0;
+  group.visible = vanish < 0.98;
+
   const scaleBoost = 1 + Math.min(0.35, (flightLift / 38) * 0.35);
   // Squash & stretch along the bey's spin axis (local Y). >1 stretches tall,
   // <1 flattens; keep XZ volume-ish so contacts read as a real impact.
@@ -467,6 +470,30 @@ export function createTopPhysicsBody(world, topMaterial, x, z, collisionGroup, p
 
   world.addBody(body);
   return body;
+}
+
+/**
+ * Applies a small tangential (perpendicular-to-velocity) drift force for beys
+ * whose tip creates natural orbital precession (e.g. Earth Eagle's WD tip).
+ */
+export function applyOrbitDrift(body, spin) {
+  if (!body || spin < CONFIG.SLEEP_THRESHOLD) return;
+  if (body.userData.airborne || body.userData.ringOut || body.userData.launching) return;
+
+  const driftStrength = body.userData.beyStats?.orbitDrift ?? 0;
+  if (driftStrength <= 0) return;
+
+  const vx = body.velocity.x;
+  const vz = body.velocity.z;
+  const speed = Math.hypot(vx, vz);
+  if (speed < 0.4) return;
+
+  const spinSign = body.userData.spinSign ?? 1;
+  const tx = (-vz / speed) * spinSign;
+  const tz = (vx / speed) * spinSign;
+
+  const force = driftStrength * spin * speed * 8;
+  body.applyForce(new CANNON.Vec3(tx * force, 0, tz * force), body.position);
 }
 
 /**

@@ -103,6 +103,24 @@ const GUARD_SPIN_MULT = 2.2;
 const GUARD_SELF_IMPULSE = 0.04;
 const SPIN_STEAL_KB_MULT = 0.4; // 60% knockback reduction while Spin Steal is active
 
+// Meteo L-Drago — Absorb Break (anime dragon-rush finisher that devours rival spin).
+export const LDRAGO_ABSORB_DURATION = 3.2;
+export const LDRAGO_ABSORB_WINDUP = 0.55;
+const LDRAGO_ABSORB_DASH_SPEED = 30;
+const LDRAGO_ABSORB_DASH_AIM_TRACK = 0.28;
+const LDRAGO_ABSORB_COAST_ARRIVE = 0.35;
+const LDRAGO_ABSORB_HIT_KB = 5.6;
+const LDRAGO_ABSORB_HIT_SPIN = 0.24;
+const LDRAGO_ABSORB_STEAL_GAIN = 0.1;
+const LDRAGO_ABSORB_MISS_SELF = 0.045;
+const LDRAGO_ABSORB_PULL_RATE = 5.5;
+const METEO_GLOW = '#ef4444';
+
+// Lightning L-Drago — Upper Mode (Smash Attack knockback boost; wiki mode-change gimmick).
+const LDRAGO_GLOW = '#5B21D9';
+const LDRAGO_UPPER_MODE_DUR = 3.5;
+const LDRAGO_UPPER_MODE_KB_MULT = 1.5; // +50% outgoing collision knockback
+
 // Rock Leone — Wide Ball anchor + Lion Gale Force Wall (defense-tuned, low ATK).
 const LEONE_ANCHOR_KB_OUT = 0.82;  // outgoing (low ATK stat)
 const LEONE_ANCHOR_DAMAGE_TAKEN = 0.2; // knockback felt while planted
@@ -147,12 +165,13 @@ export const BULL_STAMPEDE_DURATION = 3;
 const BULL_STAMPEDE_KB_OUT = 1.35;
 const BULL_STAMPEDE_STEER = 1.35;
 export const BULL_UPPERCUT_DURATION = 9;
-export const BULL_UPPERCUT_WINDUP = 0.65;
-export const BULL_DASH_BUILD_DUR = 0.55;
+export const BULL_UPPERCUT_WINDUP = 0.42;
+export const BULL_DASH_BUILD_DUR = 0.32;
 export const BULL_CHARGE_DUR = BULL_DASH_BUILD_DUR;
-const BULL_DASH_SPEED = 19.5;
+const BULL_DASH_SPEED = 28;
 const BULL_DASH_LEAN = 0.36;
-const BULL_COAST_ARRIVE = 0.45;
+const BULL_COAST_ARRIVE = 0.35;
+const BULL_DASH_AIM_TRACK_DUR = 0.14;
 const BULL_RECOVER_DUR = 0.45;
 const BULL_UPPERCUT_BASE_KB = 2.4;
 const BULL_UPPERCUT_SPIN_MIN = 0.25;
@@ -169,6 +188,37 @@ export function isBullFlipActive(body) {
 }
 const BULL_UPPERCUT_SLAM_MULT = 1.2;
 const BULL_UPPERCUT_LIFT = 14;
+
+// Ray Striker — Blitz Charge + Lightning Sword Flash (Ray wheel / CS tip rush).
+const STRIKER_GLOW = '#14b8a6';
+const STRIKER_BLITZ_STEER = 1.95;
+export const STRIKER_FLASH_DURATION = 3.4;
+export const STRIKER_FLASH_WINDUP = 0.35;
+export const STRIKER_VANISH_DUR = 0.16;
+export const STRIKER_REAPPEAR_DUR = 0.12;
+const STRIKER_TELEPORT_LEAD = 2.4;
+const STRIKER_DASH_SPEED = 32;
+const STRIKER_DASH_AIM_TRACK = 0.2;
+const STRIKER_FLASH_KB = 4.4;
+const STRIKER_FLASH_SPIN = 0.17;
+const STRIKER_FLASH_MISS_SELF = 0.035;
+const STRIKER_COAST_ARRIVE = 0.35;
+
+// Earth Eagle — Counter Stance + Diving Crush.
+const EAGLE_GLOW = '#f59e0b';
+const EAGLE_COUNTER_DUR = 3.2;
+const EAGLE_COUNTER_KB_MULT = 2.2;
+const EAGLE_COUNTER_SELF_MULT = 0.18;
+const EAGLE_COUNTER_SPIN_MULT = 2.15;
+const EAGLE_DIVE_APEX = 24;
+const EAGLE_DIVE_ASCEND_DUR = 0.74;
+const EAGLE_DIVE_HOVER_DUR = 0.34;
+const EAGLE_DIVE_DUR = 0.44;
+const EAGLE_DIVE_SETTLE_DUR = 0.75;
+const EAGLE_DIVE_HIT_SPIN = 0.22;
+const EAGLE_DIVE_MISS_SELF = 0.045;
+const EAGLE_DIVE_IMPULSE_MULT = 4.0;
+const EAGLE_DIVE_MIN_IMPULSE = 8.0;
 
 function groundY(body) {
   const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
@@ -203,6 +253,13 @@ function setAirborneKinematic(body) {
   }
   body.velocity.set(0, 0, 0);
   body.angularVelocity.set(0, 0, 0);
+}
+
+function syncBodyPosition(body) {
+  if (!body) return;
+  body.previousPosition.x = body.position.x;
+  body.previousPosition.y = body.position.y;
+  body.previousPosition.z = body.position.z;
 }
 
 function restoreDynamicBody(body) {
@@ -264,13 +321,19 @@ function initBullDashTarget(body, opp) {
 function stepBullDash(state, side, body, opp, dt) {
   if (body.userData.bullCoastTargetX == null) initBullDashTarget(body, opp);
 
+  body.userData.bullUpperPhaseT = (body.userData.bullUpperPhaseT ?? 0) + dt;
+
+  // Refresh aim line through the foe for the first fraction of the dash.
+  if (opp && body.userData.bullUpperPhaseT < BULL_DASH_AIM_TRACK_DUR) {
+    initBullDashTarget(body, opp);
+  }
+
   const tx = body.userData.bullCoastTargetX;
   const tz = body.userData.bullCoastTargetZ;
   const dx = tx - body.position.x;
   const dz = tz - body.position.z;
   const remain = Math.hypot(dx, dz);
 
-  body.userData.bullUpperPhaseT = (body.userData.bullUpperPhaseT ?? 0) + dt;
   body.userData.bullUpperSlamming = true;
   body.position.y = groundY(body);
 
@@ -300,6 +363,399 @@ function stepBullUppercutDash(state, dt) {
     if (!body || body.userData.bullUpperPhase !== 'dash') continue;
     if (stepBullDash(state, side, body, opp, dt)) {
       body.userData.bullDashDone = true;
+    }
+  }
+}
+
+function initStrikerDashTarget(body, opp) {
+  const fromX = body.userData.strikerChargeFromX ?? body.position.x;
+  const fromZ = body.userData.strikerChargeFromZ ?? body.position.z;
+  let nx = (opp?.position.x ?? body.position.x) - fromX;
+  let nz = (opp?.position.z ?? body.position.z) - fromZ;
+  const d = Math.hypot(nx, nz);
+  if (d < 0.05) {
+    const yaw = Math.atan2(body.position.z, body.position.x);
+    nx = Math.cos(yaw);
+    nz = Math.sin(yaw);
+  } else {
+    nx /= d;
+    nz /= d;
+  }
+  body.userData.strikerCoastNx = nx;
+  body.userData.strikerCoastNz = nz;
+
+  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const maxR = CONFIG.WALL_RADIUS - r - 0.04;
+  const angle = Math.atan2(nz, nx);
+  body.userData.strikerCoastTargetX = Math.cos(angle) * maxR;
+  body.userData.strikerCoastTargetZ = Math.sin(angle) * maxR;
+}
+
+/** Snap Ray Striker behind the rival along the attack line (anime blink-in). */
+function teleportStrikerForFlash(body, opp) {
+  if (!opp) return;
+  const fromX = body.userData.strikerVanishX ?? body.position.x;
+  const fromZ = body.userData.strikerVanishZ ?? body.position.z;
+  let nx = opp.position.x - fromX;
+  let nz = opp.position.z - fromZ;
+  const d = Math.hypot(nx, nz);
+  if (d < 0.05) {
+    const yaw = Math.atan2(body.position.z, body.position.x);
+    nx = Math.cos(yaw);
+    nz = Math.sin(yaw);
+  } else {
+    nx /= d;
+    nz /= d;
+  }
+  const rA = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const lead = rA + rB + STRIKER_TELEPORT_LEAD;
+  body.position.x = opp.position.x - nx * lead;
+  body.position.z = opp.position.z - nz * lead;
+  body.position.y = groundY(body);
+  body.userData.strikerChargeFromX = body.position.x;
+  body.userData.strikerChargeFromZ = body.position.z;
+  initStrikerDashTarget(body, opp);
+  syncBodyPosition(body);
+}
+
+function advanceStrikerFlashDash(state, side, body, opp, dt) {
+  if (body.userData.strikerCoastTargetX == null) initStrikerDashTarget(body, opp);
+
+  body.userData.strikerFlashPhaseT = (body.userData.strikerFlashPhaseT ?? 0) + dt;
+  if (opp && body.userData.strikerFlashPhaseT < STRIKER_DASH_AIM_TRACK) {
+    initStrikerDashTarget(body, opp);
+  }
+
+  const tx = body.userData.strikerCoastTargetX;
+  const tz = body.userData.strikerCoastTargetZ;
+  const dx = tx - body.position.x;
+  const dz = tz - body.position.z;
+  const remain = Math.hypot(dx, dz);
+
+  body.userData.strikerSlamming = true;
+  body.userData.slamming = true;
+  body.position.y = groundY(body);
+
+  if (remain < STRIKER_COAST_ARRIVE) {
+    body.position.x = tx;
+    body.position.z = tz;
+    syncBodyPosition(body);
+    return true;
+  }
+
+  const move = Math.min(STRIKER_DASH_SPEED * dt, remain);
+  body.position.x += (dx / remain) * move;
+  body.position.z += (dz / remain) * move;
+  syncBodyPosition(body);
+
+  if (opp && strikerFlashOverlap(body, opp) && !body.userData.strikerFlashHit) {
+    applyStrikerFlashHit(state, side, body, opp);
+  }
+
+  return false;
+}
+
+function strikerFlashOverlap(body, opp) {
+  if (!body || !opp) return false;
+  const dx = body.position.x - opp.position.x;
+  const dz = body.position.z - opp.position.z;
+  const rA = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const reach = (rA + rB) * 1.08;
+  return dx * dx + dz * dz <= reach * reach;
+}
+
+function applyStrikerFlashHit(state, side, body, opp) {
+  if (!body || !opp || body.userData.strikerFlashHit) return;
+  body.userData.strikerFlashHit = true;
+  let nx = opp.position.x - body.position.x;
+  let nz = opp.position.z - body.position.z;
+  const d = Math.hypot(nx, nz) || 1;
+  nx /= d;
+  nz /= d;
+  applyPhysicsKnockback(opp, nx, nz, STRIKER_FLASH_KB);
+  const victimSpinKey = side === 'player' ? 'aiSpin' : 'playerSpin';
+  state[victimSpinKey] = Math.max(0, state[victimSpinKey] - STRIKER_FLASH_SPIN);
+  body.userData.strikerImpactFlash = true;
+}
+
+function pinStrikerFlashPhysics(body) {
+  if (!body) return;
+  if (body.type !== CANNON.Body.KINEMATIC) setAirborneKinematic(body);
+  setBodyCollisions(body, false);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+  body.position.y = groundY(body);
+}
+
+function releaseStrikerFlashControl(body) {
+  if (!body) return;
+  body.userData.airborne = false;
+  body.userData.controlLocked = false;
+  body.userData.invulnerable = false;
+  body.userData.slamming = false;
+  body.userData.strikerSlamming = false;
+  delete body.userData.strikerFlashPhase;
+  delete body.userData.strikerFlashPhaseT;
+  delete body.userData.strikerCoastTargetX;
+  delete body.userData.strikerCoastTargetZ;
+  delete body.userData.strikerCoastNx;
+  delete body.userData.strikerCoastNz;
+  delete body.userData.strikerChargeFromX;
+  delete body.userData.strikerChargeFromZ;
+  delete body.userData.strikerFlashHit;
+  delete body.userData.strikerImpactFlash;
+  delete body.userData.strikerImpactFlashT;
+  delete body.userData.strikerDashDone;
+  delete body.userData.strikerWindupEndTilt;
+  delete body.userData.topVanish;
+  delete body.userData.strikerVanishX;
+  delete body.userData.strikerVanishZ;
+  delete body.userData.strikerReappearFlash;
+  body.userData.flightLift = 0;
+  body.userData.flightTilt = 0;
+  body.userData.flightRoll = 0;
+  body.userData.flightSquash = 1;
+  setBodyCollisions(body, true);
+  if (body.type === CANNON.Body.KINEMATIC) restoreDynamicBody(body);
+}
+
+function finishStrikerFlash(state, side, slot, body, dt) {
+  if (!body.userData.strikerFlashHit) {
+    const selfSpinKey = spinKey(side);
+    state[selfSpinKey] = Math.max(0, state[selfSpinKey] - STRIKER_FLASH_MISS_SELF);
+  }
+  releaseStrikerFlashControl(body);
+  if (slot.ability.onEnd) slot.ability.onEnd(makeCtx(state, side, dt));
+  slot.active = false;
+  slot.activeRemaining = 0;
+  slot.windupRemaining = 0;
+  slot.windupDuration = 0;
+}
+
+
+function initLdragoAbsorbTarget(body, opp) {
+  const fromX = body.userData.ldragoAbsorbFromX ?? body.position.x;
+  const fromZ = body.userData.ldragoAbsorbFromZ ?? body.position.z;
+  let nx = (opp?.position.x ?? body.position.x) - fromX;
+  let nz = (opp?.position.z ?? body.position.z) - fromZ;
+  const d = Math.hypot(nx, nz);
+  if (d < 0.05) {
+    const yaw = Math.atan2(body.position.z, body.position.x);
+    nx = Math.cos(yaw);
+    nz = Math.sin(yaw);
+  } else {
+    nx /= d;
+    nz /= d;
+  }
+  body.userData.ldragoAbsorbNx = nx;
+  body.userData.ldragoAbsorbNz = nz;
+
+  const r = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const maxR = CONFIG.WALL_RADIUS - r - 0.04;
+  const angle = Math.atan2(nz, nx);
+  body.userData.ldragoAbsorbTargetX = Math.cos(angle) * maxR;
+  body.userData.ldragoAbsorbTargetZ = Math.sin(angle) * maxR;
+}
+
+function ldragoAbsorbOverlap(body, opp) {
+  if (!body || !opp) return false;
+  const dx = body.position.x - opp.position.x;
+  const dz = body.position.z - opp.position.z;
+  const rA = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
+  const reach = (rA + rB) * 1.1;
+  return dx * dx + dz * dz <= reach * reach;
+}
+
+function applyLdragoAbsorbHit(state, side, body, opp) {
+  if (!body || !opp || body.userData.ldragoAbsorbHit) return;
+  if (opp.userData?.invulnerable) return;
+  body.userData.ldragoAbsorbHit = true;
+  let nx = opp.position.x - body.position.x;
+  let nz = opp.position.z - body.position.z;
+  const d = Math.hypot(nx, nz) || 1;
+  nx /= d;
+  nz /= d;
+  applyPhysicsKnockback(opp, nx, nz, LDRAGO_ABSORB_HIT_KB);
+  const victimSpinKey = side === 'player' ? 'aiSpin' : 'playerSpin';
+  const attackerSpinKey = spinKey(side);
+  const stolen = Math.min(state[victimSpinKey], LDRAGO_ABSORB_HIT_SPIN);
+  state[victimSpinKey] = Math.max(0, state[victimSpinKey] - stolen);
+  state[attackerSpinKey] = Math.min(1, state[attackerSpinKey] + stolen * 0.65 + LDRAGO_ABSORB_STEAL_GAIN);
+  body.userData.spinStealBurstT = 1;
+  body.userData.spinStealFromX = opp.position.x;
+  body.userData.spinStealFromZ = opp.position.z;
+  body.userData.ldragoAbsorbImpact = true;
+  body.userData.ldragoAbsorbImpactT = 0;
+}
+
+function releaseLdragoAbsorbControl(body) {
+  if (!body) return;
+  body.userData.airborne = false;
+  body.userData.controlLocked = false;
+  body.userData.invulnerable = false;
+  delete body.userData.ldragoAbsorbPhase;
+  delete body.userData.ldragoAbsorbPhaseT;
+  delete body.userData.ldragoAbsorbTargetX;
+  delete body.userData.ldragoAbsorbTargetZ;
+  delete body.userData.ldragoAbsorbNx;
+  delete body.userData.ldragoAbsorbNz;
+  delete body.userData.ldragoAbsorbFromX;
+  delete body.userData.ldragoAbsorbFromZ;
+  delete body.userData.ldragoAbsorbHit;
+  delete body.userData.ldragoAbsorbWindup;
+  delete body.userData.ldragoAbsorbRush;
+  delete body.userData.ldragoAbsorbImpact;
+  delete body.userData.ldragoAbsorbImpactT;
+  delete body.userData.ldragoAbsorbDashDone;
+  delete body.userData.ldragoAbsorbCoilTilt;
+  body.userData.flightLift = 0;
+  body.userData.flightTilt = 0;
+  body.userData.flightRoll = 0;
+  body.userData.flightSquash = 1;
+  setBodyCollisions(body, true);
+  if (body.type === CANNON.Body.KINEMATIC) restoreDynamicBody(body);
+}
+
+function finishLdragoAbsorb(state, side, slot, body, dt) {
+  if (!body.userData.ldragoAbsorbHit) {
+    const selfSpinKey = spinKey(side);
+    state[selfSpinKey] = Math.max(0, state[selfSpinKey] - LDRAGO_ABSORB_MISS_SELF);
+  }
+  releaseLdragoAbsorbControl(body);
+  if (slot.ability.onEnd) slot.ability.onEnd(makeCtx(state, side, dt));
+  slot.active = false;
+  slot.activeRemaining = 0;
+  slot.windupRemaining = 0;
+  slot.windupDuration = 0;
+}
+
+function advanceLdragoAbsorbRush(state, side, body, opp, dt) {
+  if (body.userData.ldragoAbsorbTargetX == null) initLdragoAbsorbTarget(body, opp);
+
+  body.userData.ldragoAbsorbPhaseT = (body.userData.ldragoAbsorbPhaseT ?? 0) + dt;
+  if (opp && body.userData.ldragoAbsorbPhaseT < LDRAGO_ABSORB_DASH_AIM_TRACK) {
+    initLdragoAbsorbTarget(body, opp);
+  }
+
+  const tx = body.userData.ldragoAbsorbTargetX;
+  const tz = body.userData.ldragoAbsorbTargetZ;
+  const dx = tx - body.position.x;
+  const dz = tz - body.position.z;
+  const remain = Math.hypot(dx, dz);
+
+  body.userData.ldragoAbsorbRush = true;
+  body.position.y = groundY(body);
+
+  if (remain < LDRAGO_ABSORB_COAST_ARRIVE) {
+    body.position.x = tx;
+    body.position.z = tz;
+    return true;
+  }
+
+  const move = Math.min(LDRAGO_ABSORB_DASH_SPEED * dt, remain);
+  body.position.x += (dx / remain) * move;
+  body.position.z += (dz / remain) * move;
+
+  if (opp && ldragoAbsorbOverlap(body, opp)) {
+    applyLdragoAbsorbHit(state, side, body, opp);
+    return true;
+  }
+
+  return false;
+}
+
+function stepLdragoAbsorbRush(state, dt) {
+  for (const side of ['player', 'ai']) {
+    const spSlot = state.abilities?.[side]?.special;
+    if (!spSlot?.active || spSlot.ability.id !== 'ldrago_absorb_break') continue;
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
+    if (!body || body.userData.ldragoAbsorbPhase !== 'rush') continue;
+    if (advanceLdragoAbsorbRush(state, side, body, opp, dt)) {
+      body.userData.ldragoAbsorbDashDone = true;
+    }
+  }
+}
+
+function pullTowardAbsorb(body, opp, rate) {
+  if (!body || !opp) return;
+  const t = Math.min(1, rate);
+  opp.position.x += (body.position.x - opp.position.x) * t * 0.35;
+  opp.position.z += (body.position.z - opp.position.z) * t * 0.35;
+}
+
+
+/** Physics-rate phase machine for Lightning Sword Flash (windup homing, vanish pin, teleport, dash). */
+function stepStrikerFlashPhases(state, dt) {
+  for (const side of ['player', 'ai']) {
+    const spSlot = state.abilities?.[side]?.special;
+    if (!spSlot || spSlot.ability.id !== 'striker_lightning_flash') continue;
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
+    if (!body) continue;
+
+    const inMove =
+      spSlot.windupRemaining > 0 ||
+      spSlot.active ||
+      body.userData.strikerFlashPhase != null;
+    if (!inMove) continue;
+
+    pinStrikerFlashPhysics(body);
+
+    if (spSlot.windupRemaining > 0) {
+      body.userData.strikerFlashPhase = 'windup';
+      const windup = slotWindupTotal(spSlot, STRIKER_FLASH_WINDUP);
+      const t = clamp01(1 - spSlot.windupRemaining / windup);
+      if (t > 0.45 && opp) {
+        homingXZ(body, opp, 6 * dt);
+        syncBodyPosition(body);
+      }
+      continue;
+    }
+
+    if (!spSlot.active && body.userData.strikerFlashPhase == null) continue;
+
+    const phase = body.userData.strikerFlashPhase;
+
+    if (phase === 'vanish') {
+      body.position.x = body.userData.strikerVanishX ?? body.position.x;
+      body.position.z = body.userData.strikerVanishZ ?? body.position.z;
+      syncBodyPosition(body);
+      body.userData.strikerFlashPhaseT = (body.userData.strikerFlashPhaseT ?? 0) + dt;
+      if (body.userData.strikerFlashPhaseT >= STRIKER_VANISH_DUR) {
+        teleportStrikerForFlash(body, opp);
+        body.userData.strikerFlashPhase = 'reappear';
+        body.userData.strikerFlashPhaseT = 0;
+        body.userData.strikerReappearFlash = 1;
+      }
+      continue;
+    }
+
+    if (phase === 'reappear') {
+      syncBodyPosition(body);
+      body.userData.strikerFlashPhaseT = (body.userData.strikerFlashPhaseT ?? 0) + dt;
+      if (body.userData.strikerFlashPhaseT >= STRIKER_REAPPEAR_DUR) {
+        body.userData.strikerFlashPhase = 'dash';
+        body.userData.strikerFlashPhaseT = 0;
+        body.userData.slamming = true;
+        initStrikerDashTarget(body, opp);
+        delete body.userData.strikerReappearFlash;
+        delete body.userData.topVanish;
+      }
+      continue;
+    }
+
+    if (phase !== 'dash') continue;
+
+    if (advanceStrikerFlashDash(state, side, body, opp, dt)) {
+      body.userData.strikerDashDone = true;
+    }
+    if (body.userData.strikerDashDone) {
+      delete body.userData.strikerDashDone;
+      finishStrikerFlash(state, side, spSlot, body, dt);
     }
   }
 }
@@ -380,13 +836,9 @@ function applyLightningStrike(state, casterBody, spot) {
 
     const k = spinKey(side);
     state[k] = Math.max(0, state[k] - STAR_BLAST_HIT_SPIN);
-
-    let dx = body.position.x - spot.x;
-    let dz = body.position.z - spot.z;
-    const d = Math.hypot(dx, dz) || 1;
-    dx /= d;
-    dz /= d;
-    applyPhysicsKnockback(body, dx, dz, LDRAGO_LIGHTNING_HIT_KNOCKBACK);
+    // Star Blast-style connect: launch the victim away from L-Drago (the caster),
+    // not radially from the strike point. Matches Pegasus Star Blast feel.
+    applyStarBlastHitKnockback(casterBody, body);
   }
 }
 
@@ -488,10 +940,11 @@ function initStarBlast(body) {
   body.userData.starWallZ = wall.z;
   body.userData.starWallNx = wall.nx;
   body.userData.starWallNz = wall.nz;
-  body.userData.starPhase = 'windup';
+  body.userData.starBlastWindup = true;
   body.userData.starPhaseT = 0;
   body.userData.starImpactFlash = false;
   body.userData.starBlastHit = false;
+  delete body.userData.starPhase;
   delete body.userData.starBlastResolved;
   setBodyCollisions(body, false);
 }
@@ -511,6 +964,7 @@ function releaseStarBlastControl(body) {
   body.userData.controlLocked = false;
   body.userData.airborne = false;
   clearStarBlastMotion(body);
+  delete body.userData.starBlastWindup;
   delete body.userData.starPhase;
   delete body.userData.starPhaseT;
   delete body.userData.starImpactFlash;
@@ -525,6 +979,74 @@ function releaseStarBlastControl(body) {
   body.position.y = groundY(body);
   body.velocity.set(0, 0, 0);
   body.angularVelocity.set(0, 0, 0);
+}
+
+function clearEagleDiveMotion(body) {
+  if (!body) return;
+  body.userData.flightLift = 0;
+  body.userData.flightTilt = 0;
+  body.userData.flightRoll = 0;
+  body.userData.flightSquash = 1;
+  body.userData.slamming = false;
+  body.userData.eagleDiveSlamming = false;
+  body.userData.eagleImpactFlash = false;
+  delete body.userData.eagleDivePhase;
+  delete body.userData.eagleDivePhaseT;
+  delete body.userData.eagleDiveHit;
+  delete body.userData.eagleDiveResolved;
+  delete body.userData.eagleDiveSettleTilt;
+  delete body.userData.eagleDiveSettleRoll;
+  delete body.userData.eagleDiveTargetX;
+  delete body.userData.eagleDiveTargetZ;
+}
+
+function releaseEagleDiveControl(body) {
+  if (!body) return;
+  body.userData.controlLocked = false;
+  body.userData.airborne = false;
+  body.userData.invulnerable = false;
+  body.userData.eagleDiveWindup = false;
+  clearEagleDiveMotion(body);
+  setBodyCollisions(body, true);
+  if (body.type === CANNON.Body.KINEMATIC) {
+    restoreDynamicBody(body);
+  }
+  body.position.y = groundY(body);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+}
+
+function resolveEagleDiveOutcome(state, side, body) {
+  if (!body || body.userData.eagleDiveResolved) return;
+  body.userData.eagleDiveResolved = true;
+  if (!body.userData.eagleDiveHit) {
+    const k = spinKey(side);
+    state[k] = Math.max(0, state[k] - EAGLE_DIVE_MISS_SELF);
+  }
+}
+
+function finishEagleDive(state, side, slot, body, dt) {
+  if (!body || (!slot.active && body.userData.eagleDivePhase == null)) return;
+  resolveEagleDiveOutcome(state, side, body);
+  slot.active = false;
+  slot.activeRemaining = 0;
+  slot.windupRemaining = 0;
+  if (slot.ability.onEnd) slot.ability.onEnd(makeCtx(state, side, dt));
+}
+
+function lockEagleDiveTarget(body, opp) {
+  if (!body) return;
+  body.userData.eagleDiveTargetX = opp?.position.x ?? body.position.x;
+  body.userData.eagleDiveTargetZ = opp?.position.z ?? body.position.z;
+}
+
+function moveTowardEagleDiveTarget(body, rate) {
+  if (!body) return;
+  const tx = body.userData.eagleDiveTargetX ?? body.position.x;
+  const tz = body.userData.eagleDiveTargetZ ?? body.position.z;
+  const t = Math.min(1, rate);
+  body.position.x += (tx - body.position.x) * t;
+  body.position.z += (tz - body.position.z) * t;
 }
 
 function clearStarBlastMotion(body) {
@@ -595,7 +1117,8 @@ function bullUppercutOverlap(body, opp) {
   const dz = body.position.z - opp.position.z;
   const rA = body.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
   const rB = opp.userData.outerRadius ?? CONFIG.DEFAULT_OUTER_RADIUS;
-  const reach = rA + rB;
+  const reachMult = body.userData.bullUpperSlamming ? 1.12 : 1;
+  const reach = (rA + rB) * reachMult;
   return dx * dx + dz * dz <= reach * reach;
 }
 
@@ -948,6 +1471,7 @@ export const ABILITY_REGISTRY = {
       b.userData.slamming = false;
       b.userData.flightTilt = 0;
       b.userData.flightRoll = 0;
+      delete b.userData.starBlastWindup;
       b.userData.starPhase = 'dash';
       b.userData.starPhaseT = 0;
       setAirborneKinematic(b);
@@ -958,17 +1482,110 @@ export const ABILITY_REGISTRY = {
     },
   },
 
-  ldrago_supreme_flight: {
-    id: 'ldrago_supreme_flight',
-    name: 'Dragon Emperor Supreme Flight',
+  eagle_counter_stance: {
+    id: 'eagle_counter_stance',
+    name: 'Counter Stance',
+    slot: 'power',
+    icon: 'C',
+    desc: 'Eagle braces and counters the foe\'s next move with reflected knockback and spin damage.',
+    charge: 6,
+    cooldown: 9,
+    duration: EAGLE_COUNTER_DUR,
+    windup: 0,
+    glow: EAGLE_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.counterStance = true;
+      b.userData.eagleCounterT = 0;
+      b.userData.eagleCounterFlashT = 0;
+      b.userData.eagleCounterFromX = null;
+      b.userData.eagleCounterFromZ = null;
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      b.userData.counterStance = false;
+      delete b.userData.eagleCounterT;
+      delete b.userData.eagleCounterFlashT;
+      delete b.userData.eagleCounterFromX;
+      delete b.userData.eagleCounterFromZ;
+    },
+  },
+
+  eagle_diving_crush: {
+    id: 'eagle_diving_crush',
+    name: 'Diving Crush',
+    slot: 'special',
+    icon: 'V',
+    desc: 'Eagle rises above the stadium, then crushes its opponent with a talon-first diving smash.',
+    charge: 11,
+    cooldown: 13,
+    duration: 3.1,
+    windup: 0.55,
+    glow: EAGLE_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.airborne = true;
+      b.userData.invulnerable = true;
+      b.userData.controlLocked = true;
+      b.userData.slamming = false;
+      b.userData.eagleDiveWindup = false;
+      b.userData.eagleDivePhase = 'ascend';
+      b.userData.eagleDivePhaseT = 0;
+      b.userData.eagleDiveHit = false;
+      delete b.userData.eagleDiveResolved;
+      delete b.userData.eagleDiveTargetX;
+      delete b.userData.eagleDiveTargetZ;
+      setAirborneKinematic(b);
+      setBodyCollisions(b, false);
+    },
+    onEnd(ctx) {
+      releaseEagleDiveControl(ctx.body);
+    },
+  },
+
+  ldrago_absorb_break: {
+    id: 'ldrago_absorb_break',
+    name: 'Dragon Emperor: Absorb Break',
+    slot: 'special',
+    icon: '\u2620',
+    desc: 'Coils and rushes the rival — devours a huge chunk of spin and knocks them back on connect.',
+    charge: 11,
+    cooldown: 13,
+    duration: LDRAGO_ABSORB_DURATION,
+    windup: LDRAGO_ABSORB_WINDUP,
+    glow: METEO_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.airborne = true;
+      b.userData.controlLocked = true;
+      b.userData.invulnerable = true;
+      b.userData.ldragoAbsorbPhase = 'rush';
+      b.userData.ldragoAbsorbPhaseT = 0;
+      delete b.userData.ldragoAbsorbHit;
+      delete b.userData.ldragoAbsorbDashDone;
+      delete b.userData.ldragoAbsorbWindup;
+      b.userData.ldragoAbsorbFromX = b.position.x;
+      b.userData.ldragoAbsorbFromZ = b.position.z;
+      initLdragoAbsorbTarget(b, ctx.opponentBody);
+      setAirborneKinematic(b);
+      setBodyCollisions(b, false);
+    },
+    onEnd(ctx) {
+      releaseLdragoAbsorbControl(ctx.body);
+    },
+  },
+
+  ldrago_soaring_destruction: {
+    id: 'ldrago_soaring_destruction',
+    name: 'Dragon Emperor, Soaring Destruction',
     slot: 'special',
     icon: '\u2726',
-    desc: 'Rises and calls down five lightning strikes; foes caught take Star Blast-level spin damage and heavy knockback.',
+    desc: 'Ryuga\'s soaring lightning assault — foes struck take Star Blast-level knockback and spin loss.',
     charge: 12,
     cooldown: 14,
     duration: 3.05,
     windup: 0.65,
-    glow: '#f87171',
+    glow: LDRAGO_GLOW,
     onActivate(ctx) {
       const b = ctx.body;
       b.userData.airborne = true;
@@ -1020,12 +1637,12 @@ export const ABILITY_REGISTRY = {
     name: 'Spin Steal',
     slot: 'power',
     icon: '\u21BB',
-    desc: 'While active, steal opponent spin, take no spin loss, and cut collision knockback by 60%.',
+    desc: 'While active, steal opponent spin on every clash, take no spin loss, and cut collision knockback by 60%.',
     charge: 7.5,
     cooldown: 10,
     duration: 4,
     windup: 0,
-    glow: '#f87171',
+    glow: METEO_GLOW,
     onActivate(ctx) {
       const b = ctx.body;
       b.userData.spinStealing = true;
@@ -1038,6 +1655,31 @@ export const ABILITY_REGISTRY = {
       delete b.userData.spinStealBurstT;
       delete b.userData.spinStealFromX;
       delete b.userData.spinStealFromZ;
+    },
+  },
+
+  // Lightning L-Drago power: rotate L-Drago I to Upper Mode for a Smash Attack
+  // knockback burst (wiki fusion-wheel mode-change gimmick).
+  ldrago_upper_mode: {
+    id: 'ldrago_upper_mode',
+    name: 'Upper Mode',
+    slot: 'power',
+    icon: '\u25B2',
+    desc: 'Rotates L-Drago I to Upper Attack — outgoing collision knockback boosted 50% for 3.5s.',
+    charge: 7.5,
+    cooldown: 10,
+    duration: LDRAGO_UPPER_MODE_DUR,
+    windup: 0,
+    glow: LDRAGO_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.atkCombatMultMult = LDRAGO_UPPER_MODE_KB_MULT;
+      b.userData.ldragoUpperMode = true;
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      delete b.userData.atkCombatMultMult;
+      delete b.userData.ldragoUpperMode;
     },
   },
 
@@ -1396,6 +2038,70 @@ export const ABILITY_REGISTRY = {
       releaseBullUppercutControl(ctx.body);
     },
   },
+
+  striker_blitz_charge: {
+    id: 'striker_blitz_charge',
+    name: 'Blitz Charge',
+    slot: 'power',
+    icon: '\u00BB',
+    desc: 'CS tip digs in for a sharp burst of speed and steering.',
+    charge: 5,
+    cooldown: 8,
+    duration: 3,
+    windup: 0,
+    glow: STRIKER_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.steerMult = STRIKER_BLITZ_STEER;
+      b.userData.boosting = true;
+      b.userData.boostT = 0;
+      b.userData.prevDamping = b.linearDamping;
+      b.linearDamping = Math.max(0.05, b.linearDamping * 0.48);
+    },
+    onEnd(ctx) {
+      const b = ctx.body;
+      b.userData.steerMult = 1;
+      b.userData.boosting = false;
+      delete b.userData.boostT;
+      if (b.userData.prevDamping != null) b.linearDamping = b.userData.prevDamping;
+    },
+  },
+
+  striker_lightning_flash: {
+    id: 'striker_lightning_flash',
+    name: 'Lightning Sword Flash',
+    slot: 'special',
+    icon: '\u26A1',
+    desc: 'Vanishes in a teal flash, reappears on the rival, and pierces through — whiffs cost a little spin.',
+    charge: 10,
+    cooldown: 11,
+    duration: STRIKER_FLASH_DURATION,
+    windup: STRIKER_FLASH_WINDUP,
+    glow: STRIKER_GLOW,
+    onActivate(ctx) {
+      const b = ctx.body;
+      b.userData.airborne = true;
+      b.userData.controlLocked = true;
+      b.userData.invulnerable = true;
+      b.userData.strikerFlashPhase = 'vanish';
+      b.userData.strikerFlashPhaseT = 0;
+      b.userData.topVanish = 0;
+      delete b.userData.strikerFlashHit;
+      delete b.userData.strikerDashDone;
+      delete b.userData.strikerReappearFlash;
+      b.userData.strikerVanishX = b.position.x;
+      b.userData.strikerVanishZ = b.position.z;
+      b.userData.strikerChargeFromX = b.position.x;
+      b.userData.strikerChargeFromZ = b.position.z;
+      delete b.userData.strikerCoastTargetX;
+      delete b.userData.strikerCoastTargetZ;
+      setAirborneKinematic(b);
+      setBodyCollisions(b, false);
+    },
+    onEnd(ctx) {
+      releaseStrikerFlashControl(ctx.body);
+    },
+  },
 };
 
 // ---- runtime ----------------------------------------------------------------
@@ -1473,9 +2179,15 @@ function applyAbilityWindupSetup(state, side, ability) {
     body.userData.controlLocked = true;
     initStarBlast(body);
   }
-  if (ability.id === 'ldrago_supreme_flight') {
+  if (ability.id === 'ldrago_soaring_destruction') {
     body.userData.invulnerable = true;
     body.userData.ldragoFlightWindup = true;
+  }
+  if (ability.id === 'ldrago_absorb_break') {
+    body.userData.controlLocked = true;
+    body.userData.ldragoAbsorbWindup = true;
+    body.userData.ldragoAbsorbFromX = body.position.x;
+    body.userData.ldragoAbsorbFromZ = body.position.z;
   }
   if (ability.id === 'leone_lion_wall') {
     body.userData.controlLocked = true;
@@ -1495,6 +2207,27 @@ function applyAbilityWindupSetup(state, side, ability) {
   if (ability.id === 'bull_red_horn_uppercut') {
     body.userData.controlLocked = true;
     initBullUppercut(body);
+  }
+  if (ability.id === 'striker_lightning_flash') {
+    body.userData.controlLocked = true;
+    body.userData.airborne = true;
+    body.userData.invulnerable = true;
+    body.userData.strikerFlashPhase = 'windup';
+    body.userData.strikerFlashPhaseT = 0;
+    setAirborneKinematic(body);
+    setBodyCollisions(body, false);
+  }
+  if (ability.id === 'eagle_diving_crush') {
+    body.userData.controlLocked = true;
+    body.userData.airborne = true;
+    body.userData.invulnerable = true;
+    body.userData.eagleDiveWindup = true;
+    body.userData.flightLift = 0;
+    body.userData.flightTilt = 0;
+    body.userData.flightRoll = 0;
+    body.userData.flightSquash = 1;
+    body.velocity.set(0, 0, 0);
+    setBodyCollisions(body, false);
   }
 }
 
@@ -1555,6 +2288,18 @@ function cancelSlotOnSpinStop(state, side, slot, dt) {
     finishBullUppercut(state, side, slot, body, dt);
     return true;
   }
+  if (id === 'striker_lightning_flash') {
+    finishStrikerFlash(state, side, slot, body, dt);
+    return true;
+  }
+  if (id === 'ldrago_absorb_break') {
+    finishLdragoAbsorb(state, side, slot, body, dt);
+    return true;
+  }
+  if (id === 'eagle_diving_crush') {
+    finishEagleDive(state, side, slot, body, dt);
+    return true;
+  }
   if (ability.onEnd) ability.onEnd(makeCtx(state, side, dt));
   slot.active = false;
   slot.activeRemaining = 0;
@@ -1591,6 +2336,8 @@ export function stepAbilities(state, dt) {
   tickBullFlipDecay(state.playerBody, dt);
   tickBullFlipDecay(state.aiBody, dt);
   stepBullUppercutDash(state, dt);
+  stepStrikerFlashPhases(state, dt);
+  stepLdragoAbsorbRush(state, dt);
   stepLibraBusterChannel(state, dt);
   for (const side of ['player', 'ai']) {
     const runtime = state.abilities[side];
@@ -1617,14 +2364,17 @@ export function tickAbilityVisuals(state, dt) {
     if (!body) continue;
 
     const inMove =
-      slot.windupRemaining > 0 || slot.active || body.userData.starPhase != null;
+      slot.windupRemaining > 0 ||
+      slot.active ||
+      body.userData.starBlastWindup ||
+      body.userData.starPhase != null;
     if (!inMove) continue;
 
     const floor = groundY(body);
     body.position.y = floor;
     body.velocity.set(0, 0, 0);
 
-    if (slot.windupRemaining > 0) {
+    if (slot.windupRemaining > 0 || body.userData.starBlastWindup) {
       // Anticipation: crouch on the floor (no lift) while the logo flash plays.
       const windup = slotWindupTotal(slot, 0.5);
       const t = clamp01(windup > 0 ? 1 - slot.windupRemaining / windup : 1);
@@ -1637,16 +2387,26 @@ export function tickAbilityVisuals(state, dt) {
       continue;
     }
 
-    if (!slot.active) continue;
-
-    let phase = body.userData.starPhase ?? 'dash';
-    // Windup is slot-timer only; once active, always run the dash phase machine.
-    if (phase === 'windup') {
-      phase = 'dash';
-      body.userData.starPhase = 'dash';
+    if (!slot.active) {
+      if (body.userData.controlLocked) {
+        resolveStarBlastOutcome(state, side, body);
+        releaseStarBlastControl(body);
+      }
+      continue;
     }
+
+    const phase = body.userData.starPhase;
+    if (!phase) {
+      finishStarBlast(state, side, slot, body, dt);
+      continue;
+    }
+
     body.userData.starPhaseT = (body.userData.starPhaseT ?? 0) + dt;
     body.userData.flightSquash = body.userData.flightSquash ?? 1;
+
+    const oppSide = side === 'player' ? 'ai' : 'player';
+    const oppSleeping =
+      body.userData.starBlastHit && state[spinKey(oppSide)] <= CONFIG.SPIN_STOPPED;
 
     switch (phase) {
       // 1) Accelerating dash toward the wall, leaning into the run.
@@ -1682,6 +2442,16 @@ export function tickAbilityVisuals(state, dt) {
 
       // 2) Wall hit + continuous elevation in one arc (no plateau between kicks).
       case 'ascend': {
+        if (oppSleeping) {
+          body.userData.starPhase = 'settle';
+          body.userData.starPhaseT = STAR_SETTLE_DUR * 0.82;
+          body.userData.flightLift = 0;
+          body.userData.flightTilt = 0;
+          body.userData.flightRoll = 0;
+          body.userData.flightSquash = 1;
+          body.userData.slamming = false;
+          break;
+        }
         body.userData.slamming = false;
         const t = clamp01(body.userData.starPhaseT / STAR_ASCEND_DUR);
         const ix = body.userData.starImpactX ?? body.position.x;
@@ -1727,6 +2497,17 @@ export function tickAbilityVisuals(state, dt) {
 
       // 3) Accelerating plunge, pitched to show the underside, homing onto foe.
       case 'dive': {
+        if (oppSleeping) {
+          body.userData.starPhase = 'settle';
+          body.userData.starPhaseT = STAR_SETTLE_DUR * 0.82;
+          body.userData.flightLift = 0;
+          body.userData.flightTilt = 0;
+          body.userData.flightRoll = 0;
+          body.userData.flightSquash = 1;
+          body.userData.slamming = false;
+          setBodyCollisions(body, true);
+          break;
+        }
         body.userData.slamming = true;
         const t = clamp01(body.userData.starPhaseT / STAR_DIVE_DUR);
         const e = easeInQuad(t); // gentler, slower-looking acceleration
@@ -1753,6 +2534,17 @@ export function tickAbilityVisuals(state, dt) {
       // 6) Real decaying bounces: integrate velocity + gravity, squash on each
       //    contact, and progressively right itself to upright.
       case 'bounce': {
+        if (oppSleeping) {
+          body.userData.starPhase = 'settle';
+          body.userData.starPhaseT = STAR_SETTLE_DUR * 0.82;
+          body.userData.flightLift = 0;
+          body.userData.flightTilt = 0;
+          body.userData.flightRoll = 0;
+          body.userData.flightSquash = 1;
+          body.userData.slamming = false;
+          delete body.userData.starVY;
+          break;
+        }
         body.userData.slamming = body.userData.starVY > 0; // only damages going up off the slam
         let vy = body.userData.starVY ?? 0;
         vy -= STAR_BOUNCE_GRAVITY * dt;
@@ -1832,8 +2624,7 @@ export function tickAbilityVisuals(state, dt) {
       }
 
       default:
-        body.userData.starPhase = 'dash';
-        body.userData.starPhaseT = 0;
+        finishStarBlast(state, side, slot, body, dt);
         break;
     }
 
@@ -1868,9 +2659,6 @@ export function tickLeoneAbilityVisuals(state, dt) {
 
     // --- Wide Ball Anchor (power) ---
     const pwSlot = runtime.power;
-    if (pwSlot?.ability?.id === 'leone_wide_ball') {
-      body.userData.anchoring = !!(pwSlot.active);
-    }
     if (pwSlot?.active && pwSlot.ability.id === 'leone_wide_ball') {
       const t = body.userData.leoneAnchorT ?? 0;
       body.userData.leoneAnchorT = t + dt;
@@ -1897,9 +2685,6 @@ export function tickLeoneAbilityVisuals(state, dt) {
 
     const inWindup = spSlot.windupRemaining > 0;
     const inActive = spSlot.active;
-    // Mirror flags for VFX renderers (online clients only receive ability slots, not onActivate flags).
-    body.userData.lionWallWindup = inWindup;
-    body.userData.lionWall = inActive;
     if (!inWindup && !inActive) continue;
 
     if (inWindup) {
@@ -1952,9 +2737,6 @@ export function tickBullAbilityVisuals(state, dt) {
     if (!runtime) continue;
 
     const pwSlot = runtime.power;
-    if (pwSlot?.ability?.id === 'bull_maximum_stampede') {
-      body.userData.stampeding = !!pwSlot.active;
-    }
     if (pwSlot?.active && pwSlot.ability.id === 'bull_maximum_stampede') {
       const t = body.userData.stampedeT ?? 0;
       body.userData.stampedeT = t + dt;
@@ -1991,6 +2773,8 @@ export function tickBullAbilityVisuals(state, dt) {
       const windup = slotWindupTotal(spSlot, BULL_UPPERCUT_WINDUP);
       const t = clamp01(1 - spSlot.windupRemaining / windup);
       const e = easeInOutCubic(t);
+      // Late windup: slide toward the foe so the dash line is fresher at launch.
+      if (t > 0.5 && opp) homingXZ(body, opp, 5 * dt);
       body.userData.flightLift = 0;
       body.userData.bullWindupEndTilt = 0.12 * easeOutCubic(t);
       body.userData.flightTilt = body.userData.bullWindupEndTilt;
@@ -2032,6 +2816,237 @@ export function tickBullAbilityVisuals(state, dt) {
   }
 }
 
+/** Per-frame visual animation for Ray Striker's blitz charge and lightning flash. */
+export function tickStrikerAbilityVisuals(state, dt) {
+  if (!state.abilities) return;
+
+  for (const side of ['player', 'ai']) {
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    if (!body) continue;
+    const runtime = state.abilities[side];
+    if (!runtime) continue;
+
+    const pwSlot = runtime.power;
+    if (pwSlot?.active && pwSlot.ability.id === 'striker_blitz_charge') {
+      const t = body.userData.boostT ?? 0;
+      body.userData.boostT = t + dt;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 11);
+      body.userData.flightSquash = 1 - 0.04 * pulse;
+      body.userData.flightTilt = 0.05 * pulse;
+    }
+
+    const spSlot = runtime.special;
+    if (!spSlot || spSlot.ability.id !== 'striker_lightning_flash') continue;
+
+    const inMove =
+      spSlot.windupRemaining > 0 ||
+      spSlot.active ||
+      body.userData.strikerFlashPhase != null;
+    if (!inMove) continue;
+
+    if (body.userData.strikerImpactFlash) {
+      body.userData.strikerImpactFlashT = (body.userData.strikerImpactFlashT ?? 0) + dt;
+      if (body.userData.strikerImpactFlashT > 0.12) {
+        body.userData.strikerImpactFlash = false;
+        delete body.userData.strikerImpactFlashT;
+      }
+    }
+
+    if (spSlot.windupRemaining > 0) {
+      const windup = slotWindupTotal(spSlot, STRIKER_FLASH_WINDUP);
+      const t = clamp01(1 - spSlot.windupRemaining / windup);
+      body.userData.flightLift = 0;
+      body.userData.strikerWindupEndTilt = 0.14 * easeOutCubic(t);
+      body.userData.flightTilt = body.userData.strikerWindupEndTilt;
+      body.userData.flightRoll = Math.sin(t * Math.PI * 2) * 0.03;
+      body.userData.flightSquash = 1 - 0.12 * easeOutQuad(t);
+      continue;
+    }
+
+    if (!spSlot.active && body.userData.strikerFlashPhase == null) continue;
+
+    const phase = body.userData.strikerFlashPhase;
+    const phaseT = body.userData.strikerFlashPhaseT ?? 0;
+
+    if (phase === 'vanish') {
+      const t = clamp01(phaseT / STRIKER_VANISH_DUR);
+      body.userData.topVanish = easeInQuad(t);
+      body.userData.flightSquash = 1 - 0.22 * easeInQuad(t);
+      body.userData.flightTilt = (body.userData.strikerWindupEndTilt ?? 0.14) * (1 - t);
+      continue;
+    }
+
+    if (phase === 'reappear') {
+      const t = clamp01(phaseT / STRIKER_REAPPEAR_DUR);
+      body.userData.topVanish = 1 - easeOutCubic(t);
+      body.userData.strikerReappearFlash = body.userData.strikerReappearFlash ?? 1 - t;
+      body.userData.flightSquash = 0.82 + 0.18 * easeOutBack(t);
+      body.userData.flightTilt = 0.2 * easeOutCubic(t);
+      body.userData.flightRoll = (body.userData.strikerCoastNz ?? 0) * 0.04 * t;
+      continue;
+    }
+
+    if (phase !== 'dash') continue;
+
+    const lean = 0.32;
+    const fromTilt = body.userData.strikerWindupEndTilt ?? 0.14;
+    const build = easeOutCubic(clamp01(phaseT / 0.22));
+    body.userData.flightTilt = fromTilt + (lean - fromTilt) * build;
+    body.userData.flightSquash = 1 + 0.04 * build;
+    body.userData.flightRoll = (body.userData.strikerCoastNz ?? 0) * 0.05 * build;
+  }
+}
+
+// ---- Earth Eagle cinematic visual driver (render rate) -----------------------
+
+function markEagleDiveHit(state, attackerSide, body, opp) {
+  if (!body || body.userData.eagleDiveHit) return;
+  if (opp?.userData?.invulnerable) return;
+  body.userData.eagleDiveHit = true;
+  const oppSide = attackerSide === 'player' ? 'ai' : 'player';
+  const k = spinKey(oppSide);
+  state[k] = Math.max(0, state[k] - EAGLE_DIVE_HIT_SPIN);
+  if (opp) {
+    const dx = opp.position.x - body.position.x;
+    const dz = opp.position.z - body.position.z;
+    const d = Math.hypot(dx, dz) || 1;
+    applyPhysicsKnockback(opp, dx / d, dz / d, STAR_BLAST_HIT_KNOCKBACK * 0.92);
+  }
+}
+
+export function tickEagleAbilityVisuals(state, dt) {
+  if (!state.abilities) return;
+  for (const side of ['player', 'ai']) {
+    const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
+    if (!body) continue;
+    const runtime = state.abilities[side];
+    if (!runtime) continue;
+
+    const pwSlot = runtime.power;
+    if (pwSlot?.active && pwSlot.ability.id === 'eagle_counter_stance') {
+      const t = body.userData.eagleCounterT ?? 0;
+      body.userData.eagleCounterT = t + dt;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 18);
+      body.userData.flightSquash = 0.93 + pulse * 0.03;
+      body.userData.flightTilt = Math.sin(t * 10) * 0.035;
+      body.userData.flightRoll = Math.cos(t * 8) * 0.025;
+      if ((body.userData.eagleCounterFlashT ?? 0) > 0) {
+        body.userData.eagleCounterFlashT = Math.max(0, body.userData.eagleCounterFlashT - dt * 3.2);
+      }
+    }
+
+    const spSlot = runtime.special;
+    if (!spSlot || spSlot.ability.id !== 'eagle_diving_crush') continue;
+    const inMove = spSlot.windupRemaining > 0 || spSlot.active || body.userData.eagleDivePhase != null;
+    if (!inMove) continue;
+
+    body.position.y = groundY(body);
+    body.velocity.set(0, 0, 0);
+
+    if (spSlot.windupRemaining > 0) {
+      const windup = slotWindupTotal(spSlot, 0.55);
+      const t = clamp01(windup > 0 ? 1 - spSlot.windupRemaining / windup : 1);
+      body.userData.eagleDiveWindup = true;
+      body.userData.flightLift = 0;
+      body.userData.flightTilt = 0.16 * easeOutQuad(t);
+      body.userData.flightRoll = Math.sin(t * Math.PI * 3) * 0.08;
+      body.userData.flightSquash = 1 - 0.18 * easeOutQuad(t);
+      body.userData.slamming = false;
+      body.userData.eagleDiveSlamming = false;
+      setBodyCollisions(body, false);
+      continue;
+    }
+
+    if (!spSlot.active) continue;
+    body.userData.eagleDiveWindup = false;
+    const phase = body.userData.eagleDivePhase ?? 'ascend';
+    body.userData.eagleDivePhaseT = (body.userData.eagleDivePhaseT ?? 0) + dt;
+
+    switch (phase) {
+      case 'ascend': {
+        const t = clamp01(body.userData.eagleDivePhaseT / EAGLE_DIVE_ASCEND_DUR);
+        const e = easeOutCubic(t);
+        body.userData.flightLift = EAGLE_DIVE_APEX * e;
+        body.userData.flightTilt = -0.18 * Math.sin(t * Math.PI);
+        body.userData.flightRoll = Math.sin(t * Math.PI * 2) * 0.18;
+        body.userData.flightSquash = 1 + 0.12 * Math.sin(t * Math.PI);
+        body.userData.slamming = false;
+        body.userData.eagleDiveSlamming = false;
+        homingXZ(body, opp, 2.4 * dt);
+        setBodyCollisions(body, false);
+        if (t >= 1) {
+          body.userData.eagleDivePhase = 'hover';
+          body.userData.eagleDivePhaseT = 0;
+        }
+        break;
+      }
+      case 'hover': {
+        const t = clamp01(body.userData.eagleDivePhaseT / EAGLE_DIVE_HOVER_DUR);
+        body.userData.flightLift = EAGLE_DIVE_APEX + Math.sin(t * Math.PI) * 1.2;
+        body.userData.flightTilt = 0.1 * Math.sin(t * Math.PI);
+        body.userData.flightRoll = Math.sin(t * Math.PI * 2) * 0.12;
+        body.userData.flightSquash = 1;
+        body.userData.slamming = false;
+        body.userData.eagleDiveSlamming = false;
+        // Keep tracking the live opponent position during hover — target locks only at dive start.
+        homingXZ(body, opp, 7 * dt);
+        setBodyCollisions(body, false);
+        if (t >= 1) {
+          lockEagleDiveTarget(body, opp);
+          body.userData.eagleDivePhase = 'dive';
+          body.userData.eagleDivePhaseT = 0;
+        }
+        break;
+      }
+      case 'dive': {
+        const t = clamp01(body.userData.eagleDivePhaseT / EAGLE_DIVE_DUR);
+        const e = easeInQuad(t);
+        moveTowardEagleDiveTarget(body, 11 * dt);
+        body.userData.flightLift = EAGLE_DIVE_APEX * (1 - e);
+        body.userData.flightTilt = -Math.PI * 0.38 * easeOutQuad(t);
+        body.userData.flightRoll = Math.PI * 0.22 * Math.sin(t * Math.PI);
+        body.userData.flightSquash = 1 + 0.2 * e;
+        body.userData.slamming = true;
+        body.userData.eagleDiveSlamming = true;
+        if (e >= 1 || body.userData.flightLift <= 0.2) {
+          body.userData.flightLift = 0;
+          body.userData.eagleImpactFlash = true;
+          if (starBlastOverlap(body, opp)) markEagleDiveHit(state, side, body, opp);
+          body.userData.eagleDiveSettleTilt = body.userData.flightTilt;
+          body.userData.eagleDiveSettleRoll = body.userData.flightRoll;
+          body.userData.eagleDivePhase = 'settle';
+          body.userData.eagleDivePhaseT = 0;
+          body.userData.slamming = false;
+          body.userData.eagleDiveSlamming = false;
+          setBodyCollisions(body, true);
+        } else {
+          setBodyCollisions(body, false);
+        }
+        break;
+      }
+      case 'settle': {
+        const t = clamp01(body.userData.eagleDivePhaseT / EAGLE_DIVE_SETTLE_DUR);
+        const decay = (1 - t) * (1 - t);
+        body.userData.eagleImpactFlash = t < 0.18;
+        body.userData.flightLift = Math.abs(Math.sin(t * Math.PI * 2)) * 0.26 * decay;
+        body.userData.flightTilt = (body.userData.eagleDiveSettleTilt ?? 0) * (1 - easeOutCubic(t));
+        body.userData.flightRoll = (body.userData.eagleDiveSettleRoll ?? 0) * (1 - easeOutCubic(t));
+        body.userData.flightSquash = 1 - 0.16 * (1 - t) + 0.08 * Math.sin(t * Math.PI) * decay;
+        body.userData.slamming = false;
+        body.userData.eagleDiveSlamming = false;
+        setBodyCollisions(body, true);
+        if (t >= 1) finishEagleDive(state, side, spSlot, body, dt);
+        break;
+      }
+      default:
+        body.userData.eagleDivePhase = 'ascend';
+        body.userData.eagleDivePhaseT = 0;
+        break;
+    }
+  }
+}
+
 // ---- Libra cinematic visual driver (render rate) ----------------------------
 
 /**
@@ -2039,6 +3054,7 @@ export function tickBullAbilityVisuals(state, dt) {
  */
 export function tickLibraAbilityVisuals(state, dt) {
   if (!state.abilities) return;
+  stepLibraBusterChannel(state, dt);
   for (const side of ['player', 'ai']) {
     const body = side === 'player' ? state.playerBody : state.aiBody;
     if (!body) continue;
@@ -2047,7 +3063,6 @@ export function tickLibraAbilityVisuals(state, dt) {
 
     const pwSlot = runtime.power;
     if (pwSlot?.active && pwSlot.ability.id === 'libra_sonic_shield') {
-      body.userData.sonicShield = true;
       const t = body.userData.sonicShieldT ?? 0;
       body.userData.sonicShieldT = t + dt;
       const pulse = 0.5 + 0.5 * Math.sin(t * 5.2);
@@ -2068,9 +3083,6 @@ export function tickLibraAbilityVisuals(state, dt) {
     const inActive = spSlot.active;
     if (!inWindup && !inActive) continue;
 
-    body.userData.sonicBusterWindup = inWindup;
-    body.userData.sonicBuster = inActive;
-
     const vt = (body.userData.sonicBusterVibrateT ?? 0) + dt;
     body.userData.sonicBusterVibrateT = vt;
     const w = LIBRA_BUSTER_VIBRATE_HZ * Math.PI * 2;
@@ -2089,21 +3101,19 @@ export function tickLibraAbilityVisuals(state, dt) {
 // ---- L-Drago cinematic visual driver (render rate) --------------------------
 
 /**
- * Per-frame body animation for L-Drago Spin Steal and Supreme Flight.
+ * Per-frame body animation for L-Drago Spin Steal and Soaring Destruction.
  */
 export function tickLdragoAbilityVisuals(state, dt) {
   if (!state.abilities) return;
   for (const side of ['player', 'ai']) {
     const body = side === 'player' ? state.playerBody : state.aiBody;
+    const opp = side === 'player' ? state.aiBody : state.playerBody;
     if (!body) continue;
     const runtime = state.abilities[side];
     if (!runtime) continue;
 
     // --- Spin Steal (power) ---
     const pwSlot = runtime.power;
-    if (pwSlot?.ability?.id === 'ldrago_spin_steal') {
-      body.userData.spinStealing = !!pwSlot.active;
-    }
     if (pwSlot?.active && pwSlot.ability.id === 'ldrago_spin_steal') {
       body.userData.spinStealT = (body.userData.spinStealT ?? 0) + dt;
       body.userData.flightRoll = Math.sin(body.userData.spinStealT * 4.5) * 0.05;
@@ -2118,19 +3128,62 @@ export function tickLdragoAbilityVisuals(state, dt) {
       continue;
     }
 
-    // --- Supreme Flight (special) ---
+    // --- Absorb Break (special) ---
+    const spAbsorb = runtime.special;
+    if (spAbsorb?.ability?.id === 'ldrago_absorb_break') {
+      const inWindup = spAbsorb.windupRemaining > 0 || body.userData.ldragoAbsorbWindup;
+      const inActive = spAbsorb.active;
+      const inMove = inWindup || inActive || body.userData.ldragoAbsorbPhase != null;
+      if (inMove) {
+        body.position.y = groundY(body);
+        body.velocity.set(0, 0, 0);
+        setBodyCollisions(body, false);
+        if (body.type !== CANNON.Body.KINEMATIC) setAirborneKinematic(body);
+
+        if (body.userData.ldragoAbsorbImpact) {
+          body.userData.ldragoAbsorbImpactT = (body.userData.ldragoAbsorbImpactT ?? 0) + dt;
+          if (body.userData.ldragoAbsorbImpactT > 0.18) {
+            body.userData.ldragoAbsorbImpact = false;
+            delete body.userData.ldragoAbsorbImpactT;
+          }
+        }
+
+        if (inWindup) {
+          const windup = slotWindupTotal(spAbsorb, LDRAGO_ABSORB_WINDUP);
+          const t = clamp01(windup > 0 ? 1 - spAbsorb.windupRemaining / windup : 1);
+          if (opp && t > 0.2) pullTowardAbsorb(body, opp, LDRAGO_ABSORB_PULL_RATE * dt);
+          body.userData.flightLift = 0;
+          body.userData.ldragoAbsorbCoilTilt = 0.18 * easeOutQuad(t);
+          body.userData.flightTilt = body.userData.ldragoAbsorbCoilTilt;
+          body.userData.flightRoll = Math.sin(t * Math.PI * 4) * 0.06;
+          body.userData.flightSquash = 1 - 0.16 * easeOutQuad(t);
+          continue;
+        }
+
+        if (inActive) {
+          const phaseT = body.userData.ldragoAbsorbPhaseT ?? 0;
+          const coilTilt = body.userData.ldragoAbsorbCoilTilt ?? 0.18;
+          const lean = 0.36;
+          const build = easeOutCubic(clamp01(phaseT / 0.2));
+          body.userData.flightTilt = coilTilt + (lean - coilTilt) * build;
+          body.userData.flightSquash = 1 + 0.05 * build;
+          body.userData.flightRoll = (body.userData.ldragoAbsorbNz ?? 0) * 0.06 * build;
+          if (body.userData.ldragoAbsorbDashDone) {
+            delete body.userData.ldragoAbsorbDashDone;
+            body.userData.ldragoAbsorbRush = false;
+            finishLdragoAbsorb(state, side, spAbsorb, body, dt);
+          }
+          continue;
+        }
+      }
+    }
+
+    // --- Soaring Destruction (special) ---
     const spSlot = runtime.special;
-    if (!spSlot || spSlot.ability.id !== 'ldrago_supreme_flight') continue;
+    if (!spSlot || spSlot.ability.id !== 'ldrago_soaring_destruction') continue;
 
     const inWindup = spSlot.windupRemaining > 0;
     const inActive = spSlot.active;
-    body.userData.ldragoFlightWindup = inWindup;
-    if (inActive) {
-      body.userData.airborne = true;
-      body.userData.invulnerable = true;
-    } else if (!inWindup) {
-      body.userData.ldragoFlightWindup = false;
-    }
     if (!inWindup && !inActive && !body.userData.ldragoFlightWindup) continue;
 
     if (inWindup || body.userData.ldragoFlightWindup) {
@@ -2197,8 +3250,9 @@ export function tickLdragoAbilityVisuals(state, dt) {
 /** True while Pegasus Star Blast should show the blue emissive glow. */
 export function shouldStarBlastGlow(body) {
   if (!body) return false;
+  if (body.userData.starBlastWindup) return true;
   const phase = body.userData.starPhase;
-  return phase === 'windup' || phase === 'dash' || phase === 'ascend' || phase === 'dive';
+  return phase === 'dash' || phase === 'ascend' || phase === 'dive';
 }
 
 /** Max visual flight height across both tops — used for other cinematic camera lift. */
@@ -2249,7 +3303,10 @@ function findActiveStarBlast(state) {
     const body = side === 'player' ? state.playerBody : state.aiBody;
     if (!body) continue;
     const inMove =
-      slot.windupRemaining > 0 || slot.active || body.userData.starPhase != null;
+      slot.windupRemaining > 0 ||
+      slot.active ||
+      body.userData.starBlastWindup ||
+      body.userData.starPhase != null;
     if (!inMove) continue;
     return true;
   }
@@ -2311,8 +3368,6 @@ export function getCameraCue(state, dt, mode) {
 export function resetStarBlastCamera() {
   _camSmoothLift = 0;
   _camStadiumT = 0;
-  _camFocusX = 0;
-  _camFocusZ = 0;
   _camFocusReady = false;
 }
 
@@ -2351,6 +3406,37 @@ export function tickAbilityTimers(state, dt) {
               releaseBullUppercutControl(body);
               finishBullUppercut(state, side, slot, body, dt);
             }
+          }
+        } else if (slot.ability.id === 'striker_lightning_flash') {
+          slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
+          if (slot.activeRemaining === 0 && slot.active) {
+            const body = side === 'player' ? state.playerBody : state.aiBody;
+            const phase = body?.userData.strikerFlashPhase;
+            if (body && phase == null) {
+              finishStrikerFlash(state, side, slot, body, dt);
+            } else if (body && (phase === 'dash' || phase === 'vanish' || phase === 'reappear' || body.userData.strikerDashDone)) {
+              releaseStrikerFlashControl(body);
+              finishStrikerFlash(state, side, slot, body, dt);
+            }
+          }
+        } else if (slot.ability.id === 'ldrago_absorb_break') {
+          slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
+          if (slot.activeRemaining === 0 && slot.active) {
+            const body = side === 'player' ? state.playerBody : state.aiBody;
+            const phase = body?.userData.ldragoAbsorbPhase;
+            if (body && phase == null) {
+              finishLdragoAbsorb(state, side, slot, body, dt);
+            } else if (body && (phase === 'rush' || body.userData.ldragoAbsorbDashDone)) {
+              releaseLdragoAbsorbControl(body);
+              finishLdragoAbsorb(state, side, slot, body, dt);
+            }
+          }
+        } else if (slot.ability.id === 'eagle_diving_crush') {
+          // Phase machine in tickEagleAbilityVisuals ends this move.
+          slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
+          if (slot.activeRemaining === 0 && slot.active) {
+            const body = side === 'player' ? state.playerBody : state.aiBody;
+            if (body) finishEagleDive(state, side, slot, body, dt);
           }
         } else {
           slot.activeRemaining = Math.max(0, slot.activeRemaining - dt);
@@ -2422,9 +3508,28 @@ function applyBullUppercutSlam(state, impact, slamBody, slamTag, victimTag) {
   return true;
 }
 
+function applyEagleDiveSlam(impact, slamBody, slamTag, victimTag) {
+  if (!slamBody?.userData?.eagleDiveSlamming) return false;
+  if (!slamBody.userData.eagleDiveHit) {
+    slamBody.userData.eagleDiveHit = true;
+    impact['spinDelta' + victimTag] = Math.min(impact['spinDelta' + victimTag], -EAGLE_DIVE_HIT_SPIN);
+  } else {
+    impact['spinDelta' + victimTag] = Math.min(impact['spinDelta' + victimTag], 0);
+  }
+  impact['spinDelta' + slamTag] *= 0.18;
+  impact['impulse' + victimTag] = Math.max(
+    impact['impulse' + victimTag] * EAGLE_DIVE_IMPULSE_MULT,
+    EAGLE_DIVE_MIN_IMPULSE
+  );
+  impact['impulse' + slamTag] *= SLAM_SELF_IMPULSE;
+  slamBody.userData.eagleImpactFlash = true;
+  return true;
+}
+
 function applySlam(impact, slamBody, slamTag, victimTag, state) {
   if (applyStarBlastSlam(impact, slamBody, slamTag, victimTag)) return;
   if (applyBullUppercutSlam(state, impact, slamBody, slamTag, victimTag)) return;
+  if (applyEagleDiveSlam(impact, slamBody, slamTag, victimTag)) return;
   if (!slamBody.userData.slamming) return;
   impact['impulse' + victimTag] *= SLAM_IMPULSE_MULT;
   impact['impulse' + slamTag] *= SLAM_SELF_IMPULSE;
@@ -2467,7 +3572,7 @@ function applySpinStealKnockback(state, impact) {
   }
 }
 
-/** Blocks spin loss (negative deltas) while a body is invulnerable (Supreme Flight). */
+/** Blocks spin loss (negative deltas) while a body is invulnerable (Soaring Destruction). */
 function applyInvulnerability(impact) {
   for (const tag of ['A', 'B']) {
     const body = impact['body' + tag];
@@ -2480,6 +3585,30 @@ function applyInvulnerability(impact) {
 function applyBullStampede(impact, body, selfTag, oppTag) {
   if (!body?.userData?.stampeding) return;
   impact['impulse' + oppTag] *= BULL_STAMPEDE_KB_OUT;
+}
+
+function applyEagleCounter(impact, body, selfTag, oppTag) {
+  if (!body?.userData?.counterStance) return;
+  const oppBody = impact['body' + oppTag];
+  const foeInMove = isBodyInSpecialMove(oppBody) || impact['closingSpeed'] > 3.4;
+  if (!foeInMove) return;
+
+  impact['impulse' + oppTag] = Math.max(
+    impact['impulse' + oppTag] * EAGLE_COUNTER_KB_MULT,
+    4.6
+  );
+  impact['impulse' + selfTag] *= EAGLE_COUNTER_SELF_MULT;
+  impact['spinDelta' + oppTag] = Math.min(
+    impact['spinDelta' + oppTag] * EAGLE_COUNTER_SPIN_MULT,
+    -0.055
+  );
+  const selfDelta = impact['spinDelta' + selfTag];
+  if (selfDelta < 0) impact['spinDelta' + selfTag] = selfDelta * 0.1;
+  body.userData.eagleCounterFlashT = 1;
+  if (oppBody) {
+    body.userData.eagleCounterFromX = oppBody.position.x;
+    body.userData.eagleCounterFromZ = oppBody.position.z;
+  }
 }
 
 function applyLeoneAnchor(impact, body, selfTag, oppTag) {
@@ -2530,6 +3659,8 @@ export function resolveContactAbilities(state, impact) {
   applyLeoneAnchor(impact, impact.bodyB, 'B', 'A');
   applyBullStampede(impact, impact.bodyA, 'A', 'B');
   applyBullStampede(impact, impact.bodyB, 'B', 'A');
+  applyEagleCounter(impact, impact.bodyA, 'A', 'B');
+  applyEagleCounter(impact, impact.bodyB, 'B', 'A');
   applyLibraBusterMitigation(state, impact);
   applyLeoneSpinResist(impact);
 }
@@ -2544,7 +3675,12 @@ export function isBodyInSpecialMove(body, state) {
     ud.slamming ||
     ud.airborne ||
     ud.stampeding ||
+    ud.counterStance ||
+    ud.eagleDivePhase != null ||
+    ud.eagleDiveSlamming ||
     ud.bullUpperSlamming ||
+    ud.strikerSlamming ||
+    ud.strikerFlashPhase != null ||
     ud.boosting ||
     ud.spinStealing ||
     ud.guarding ||
@@ -2562,6 +3698,8 @@ function contactLift(body) {
 function isAerialStriker(body) {
   if (!body) return false;
   if (body.userData.bullUpperSlamming) return true;
+  if (body.userData.strikerSlamming) return true;
+  if (body.userData.eagleDiveSlamming) return true;
   if (!body.userData.slamming) return false;
   const phase = body.userData.starPhase;
   return phase === 'dive' || phase === 'bounce';
@@ -2597,12 +3735,14 @@ export function clearAbilityFlags(body) {
   body.userData.sonicSandBoost = false;
   body.userData.spinStealing = false;
   body.userData.stampeding = false;
+  body.userData.counterStance = false;
   body.userData.invulnerable = false;
   body.userData.flightLift = 0;
   body.userData.flightTilt = 0;
   body.userData.flightRoll = 0;
   body.userData.flightSquash = 1;
   delete body.userData.contactLift;
+  delete body.userData.starBlastWindup;
   delete body.userData.starPhase;
   delete body.userData.starPhaseT;
   delete body.userData.starImpactFlash;
@@ -2631,6 +3771,12 @@ export function clearAbilityFlags(body) {
   delete body.userData.spinStealFromX;
   delete body.userData.spinStealFromZ;
   delete body.userData.stampedeT;
+  delete body.userData.eagleCounterT;
+  delete body.userData.eagleCounterFlashT;
+  delete body.userData.eagleCounterFromX;
+  delete body.userData.eagleCounterFromZ;
+  body.userData.eagleDiveWindup = false;
+  clearEagleDiveMotion(body);
   if (body.userData.bullFlipPhase) {
     releaseBullFlipVictim(body, false);
   }
@@ -2638,11 +3784,19 @@ export function clearAbilityFlags(body) {
   delete body.userData.bullImpactFlash;
   delete body.userData.bullImpactFlashT;
   clearBullUppercutMotion(body);
+  releaseStrikerFlashControl(body);
   delete body.userData.ldragoFlightT;
   delete body.userData.ldragoFlightLaunchT;
   delete body.userData.flightRepulseT;
   delete body.userData.ldragoLightningSpots;
   delete body.userData.ldragoLightningFired;
+  delete body.userData.ldragoUpperMode;
+  delete body.userData.atkCombatMultMult;
+  delete body.userData.ldragoAbsorbPhase;
+  delete body.userData.ldragoAbsorbPhaseT;
+  delete body.userData.ldragoAbsorbWindup;
+  delete body.userData.ldragoAbsorbRush;
+  delete body.userData.ldragoAbsorbImpact;
   body.userData.lionWallWindup = false;
   body.userData.ldragoFlightWindup = false;
   body.userData.sonicBusterWindup = false;

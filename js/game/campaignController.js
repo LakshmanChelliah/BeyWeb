@@ -10,6 +10,8 @@ import {
   CAMPAIGN_OPPONENT_IDS,
   CAMPAIGN_STAGE_COUNT,
   getAiTierForOpponentId,
+  getBladerDisplayName,
+  applyTournamentBladerProfile,
   pickRandomRival,
   pickTournamentOpponent,
 } from './campaign.js';
@@ -50,7 +52,8 @@ export function createCampaignController({
   }
 
   function setTournamentOpponent() {
-    const opp = pickTournamentOpponent(tournament.getOpponentIndex(), getPlayerBey());
+    const raw = pickTournamentOpponent(tournament.getOpponentIndex(), getPlayerBey());
+    const opp = applyTournamentBladerProfile(raw);
     tournament.setOpponent(opp);
     return opp;
   }
@@ -75,17 +78,19 @@ export function createCampaignController({
 
     const opp = currentMode().getCurrentOpponent();
     const diffLabel = getDifficultyLabel(getEffectiveAiTier());
+    const oppName = activeMode === 'tournament' ? getBladerDisplayName(opp) : (opp?.name ?? 'CPU');
 
     if (activeMode === 'casual') {
-      campaignHud.textContent = `Casual · ${diffLabel} · vs ${opp?.name ?? 'CPU'}`;
+      campaignHud.textContent = `Casual · ${diffLabel} · vs ${oppName}`;
       campaignHud.classList.remove('hidden');
       return;
     }
 
     const { player, cpu } = tournament.getSeriesScore();
     const tier = tournament.getOpponentIndex() + 1;
+    const stageCount = tournament.getStageCount();
     campaignHud.textContent =
-      `Tournament ${tier}/${CAMPAIGN_STAGE_COUNT} · Best of 3: ${player}–${cpu} · ${diffLabel} · vs ${opp?.name ?? 'CPU'}`;
+      `Tournament ${tier}/${stageCount} · Best of 3: ${player}–${cpu} · ${diffLabel} · vs ${oppName}`;
     campaignHud.classList.remove('hidden');
   }
 
@@ -197,7 +202,7 @@ export function createCampaignController({
     }
 
     if (restartAction === 'retry-tournament') {
-      tournament.start();
+      tournament.start(getPlayerBey());
       rollAndSetOpponent();
       beginOpponent();
       resetAIController();
@@ -227,7 +232,7 @@ export function createCampaignController({
     handleRestart,
     startTournament(playerBey) {
       activeMode = 'tournament';
-      tournament.start();
+      tournament.start(playerBey);
       setTournamentOpponent();
       beginOpponent();
     },

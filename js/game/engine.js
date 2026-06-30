@@ -33,6 +33,8 @@ import {
   tickLdragoAbilityVisuals,
   tickLibraAbilityVisuals,
   tickBullAbilityVisuals,
+  tickStrikerAbilityVisuals,
+  tickEagleAbilityVisuals,
   getCameraCue,
   resetStarBlastCamera,
   shouldStarBlastGlow,
@@ -49,6 +51,8 @@ import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
 import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
 import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
 import { createBullAbilityVfx } from '../render/bullAbilityVfx.js';
+import { createEagleAbilityVfx } from '../render/eagleAbilityVfx.js';
+import { createStrikerAbilityVfx } from '../render/strikerAbilityVfx.js';
 import { createCollisionSparksVfx } from '../render/collisionSparksVfx.js';
 import { applySnapshotMeta } from '../net/snapshot.js';
 import { createInterpolator } from '../net/interpolation.js';
@@ -88,6 +92,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     player: createBullAbilityVfx(scene),
     ai: createBullAbilityVfx(scene),
   };
+  const eagleVfx = {
+    player: createEagleAbilityVfx(scene),
+    ai: createEagleAbilityVfx(scene),
+  };
+  const strikerVfx = {
+    player: createStrikerAbilityVfx(scene),
+    ai: createStrikerAbilityVfx(scene),
+  };
   const collisionSparksVfx = createCollisionSparksVfx(scene);
 
   function resetAllAbilityVfx() {
@@ -103,6 +115,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     libraVfx.ai.reset();
     bullVfx.player.reset();
     bullVfx.ai.reset();
+    eagleVfx.player.reset();
+    eagleVfx.ai.reset();
+    strikerVfx.player.reset();
+    strikerVfx.ai.reset();
     collisionSparksVfx.reset();
   }
 
@@ -365,7 +381,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         // Warm stone / wind haze — not saturated green.
         return { color: '#c4bfb6', intensity };
       }
-      if (sp.ability.id === 'ldrago_supreme_flight') {
+      if (sp.ability.id === 'ldrago_soaring_destruction') {
         const repulse = body?.userData.flightRepulseT ?? 0;
         const launch = body?.userData.ldragoFlightLaunchT ?? 0;
         const windup = body?.userData.ldragoFlightWindup;
@@ -400,6 +416,28 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
           sp.windupRemaining > 0 || phase === 'windup' || phase === 'dash';
         return { color: sp.ability.glow, intensity: intense ? pulse * 1.55 : pulse * 0.9 };
       }
+      if (sp.ability.id === 'striker_lightning_flash') {
+        if (body?.userData.strikerImpactFlash) {
+          return { color: '#ccfbf1', intensity: 2.5 };
+        }
+        const phase = body?.userData.strikerFlashPhase;
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.016);
+        const intense =
+          sp.windupRemaining > 0 ||
+          phase === 'vanish' ||
+          phase === 'reappear' ||
+          phase === 'dash';
+        return { color: sp.ability.glow, intensity: intense ? pulse * 1.8 : pulse * 1.05 };
+      }
+      if (sp.ability.id === 'eagle_diving_crush') {
+        if (body?.userData.eagleImpactFlash) {
+          return { color: '#fef3c7', intensity: 2.4 };
+        }
+        const phase = body?.userData.eagleDivePhase;
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.014);
+        const intense = sp.windupRemaining > 0 || phase === 'hover' || phase === 'dive';
+        return { color: sp.ability.glow, intensity: intense ? pulse * 1.65 : pulse * 1.05 };
+      }
       return { color: sp.ability.glow, intensity: 1.0 };
     }
     const pw = runtime.power;
@@ -419,6 +457,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         const intensity = burst > 0 ? Math.max(base, 1.4 + burst * 0.8) : base;
         return { color: pw.ability.glow, intensity };
       }
+      if (pw.ability.id === 'ldrago_upper_mode') {
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.013);
+        return { color: pw.ability.glow, intensity: pulse * 1.7 };
+      }
       if (pw.ability.id === 'libra_sonic_shield') {
         const burst = body?.userData.sonicShieldBurstT ?? 0;
         const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.01);
@@ -428,6 +470,15 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       }
       if (pw.ability.id === 'bull_maximum_stampede') {
         const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.013);
+        return { color: pw.ability.glow, intensity: pulse * 1.2 };
+      }
+      if (pw.ability.id === 'eagle_counter_stance') {
+        const flash = body?.userData.eagleCounterFlashT ?? 0;
+        const pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.016);
+        return { color: pw.ability.glow, intensity: Math.max(pulse * 1.05, flash * 2.1) };
+      }
+      if (pw.ability.id === 'striker_blitz_charge') {
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.014);
         return { color: pw.ability.glow, intensity: pulse * 1.2 };
       }
       return { color: pw.ability.glow, intensity: 0.55 };
@@ -585,20 +636,24 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     state.playerBey = playerBey;
     state.aiBey = aiBey;
 
-    const stampBody = (body, bey) => {
+    const stampBody = (body, bey, simSide) => {
+      const buffs = bey.tournamentBuffs;
       body.userData.beyStats = {
         id: bey.id,
-        atk: bey.atk ?? 50,
-        move: bey.move ?? bey.atk ?? 50,
-        def: bey.def ?? 50,
-        sta: bey.sta ?? 50,
+        atk: Math.min(100, (bey.atk ?? 50) + (buffs?.atkBonus ?? 0)),
+        move: Math.min(100, (bey.move ?? bey.atk ?? 50) + (buffs?.moveBonus ?? 0)),
+        def: Math.min(100, (bey.def ?? 50) + (buffs?.defBonus ?? 0)),
+        sta: Math.min(100, (bey.sta ?? 50) + (buffs?.staBonus ?? 0)),
+        orbitDrift: bey.orbitDrift,
       };
       body.userData.beyColor = beyColorHex(bey.color);
+      const isAi = simSide === 'ai';
+      body.userData.spinSign = bey.leftSpin ? (isAi ? -0.95 : -1) : (isAi ? 0.95 : 1);
     };
 
     // Stamp bey stats onto sim bodies (player=slot0, ai=slot1).
-    stampBody(state.playerBody, playerBey);
-    stampBody(state.aiBody, aiBey);
+    stampBody(state.playerBody, playerBey, 'player');
+    stampBody(state.aiBody, aiBey, 'ai');
 
     // Tag sides and build ability runtimes aligned to sim bodies.
     state.playerBody.userData.side = 'player';
@@ -614,8 +669,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     buildAbilityButtons('player');
     buildAbilityButtons('ai');
 
-    stabilizeTop(state.playerBody, 0.15, 1, state.launchGrace);
-    stabilizeTop(state.aiBody, 0.15, -0.95, state.launchGrace);
+    stabilizeTop(state.playerBody, 0.15, state.playerBody.userData.spinSign ?? 1, state.launchGrace);
+    stabilizeTop(state.aiBody, 0.15, state.aiBody.userData.spinSign ?? -0.95, state.launchGrace);
     beginLaunchDrop(state.playerBody);
     beginLaunchDrop(state.aiBody);
     updateTopCollisions(state);
@@ -733,6 +788,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       tickLdragoAbilityVisuals(state, dt);
       tickLibraAbilityVisuals(state, dt);
       tickBullAbilityVisuals(state, dt);
+      tickStrikerAbilityVisuals(state, dt);
+      tickEagleAbilityVisuals(state, dt);
       trackSleepers(state);
       updateHud();
       updateAbilityHud();
@@ -781,7 +838,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         state.playerSpin,
         state.playerVisualYaw,
         dt,
-        1,
+        state.playerBody.userData.spinSign ?? 1,
         state
       );
     }
@@ -792,7 +849,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         state.aiSpin,
         state.aiVisualYaw,
         dt,
-        -0.95,
+        state.aiBody.userData.spinSign ?? -0.95,
         state
       );
     }
@@ -812,6 +869,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     libraVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     bullVfx.player.update(playerGroup, state.playerBody, camera, dt);
     bullVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    eagleVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    eagleVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    strikerVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    strikerVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     collisionSparksVfx.update(camera, dt);
 
     if (!state.gameFrozen) {

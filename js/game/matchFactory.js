@@ -25,6 +25,8 @@ import {
   tickLdragoAbilityVisuals,
   tickLibraAbilityVisuals,
   tickBullAbilityVisuals,
+  tickStrikerAbilityVisuals,
+  tickEagleAbilityVisuals,
 } from './abilities.js';
 import { evaluateWin } from './rules.js';
 import { beginRingOut, isRingOutCinematicDone } from '../physics/ringOut.js';
@@ -58,18 +60,37 @@ export const SYNC_USER_DATA_KEYS = [
   'bullCoastNx', 'bullCoastNz', 'bullCoastTargetX', 'bullCoastTargetZ', 'bullCoastDist',
   'bullChargeFromX', 'bullChargeFromZ',
   'leoneGuardT', 'leoneGuardActive',
+  'spinSign', 'topVanish', 'counterStance', 'atkCombatMultMult', 'ldragoUpperMode',
+  'boostT',
+  'eagleCounterT', 'eagleCounterFlashT', 'eagleCounterFromX', 'eagleCounterFromZ',
+  'eagleDivePhase', 'eagleDivePhaseT', 'eagleDiveWindup', 'eagleDiveSlamming',
+  'eagleDiveTargetX', 'eagleDiveTargetZ', 'eagleDiveHit', 'eagleDiveResolved',
+  'eagleDiveSettleTilt', 'eagleDiveSettleRoll', 'eagleImpactFlash',
+  'ldragoAbsorbPhase', 'ldragoAbsorbPhaseT', 'ldragoAbsorbWindup', 'ldragoAbsorbRush',
+  'ldragoAbsorbHit', 'ldragoAbsorbDashDone', 'ldragoAbsorbImpact', 'ldragoAbsorbImpactT',
+  'ldragoAbsorbFromX', 'ldragoAbsorbFromZ', 'ldragoAbsorbTargetX', 'ldragoAbsorbTargetZ',
+  'ldragoAbsorbNx', 'ldragoAbsorbNz', 'ldragoAbsorbCoilTilt',
+  'strikerFlashPhase', 'strikerFlashPhaseT', 'strikerFlashHit', 'strikerDashDone',
+  'strikerReappearFlash', 'strikerImpactFlash', 'strikerImpactFlashT',
+  'strikerVanishX', 'strikerVanishZ', 'strikerChargeFromX', 'strikerChargeFromZ',
+  'strikerCoastTargetX', 'strikerCoastTargetZ', 'strikerCoastNx', 'strikerCoastNz',
+  'strikerSlamming', 'strikerWindupEndTilt',
 ];
 
 function stampBeyStats(body, bey, side) {
+  const buffs = bey.tournamentBuffs;
   body.userData.beyStats = {
     id: bey.id,
-    atk: bey.atk ?? 50,
-    move: bey.move ?? bey.atk ?? 50,
-    def: bey.def ?? 50,
-    sta: bey.sta ?? 50,
+    atk: Math.min(100, (bey.atk ?? 50) + (buffs?.atkBonus ?? 0)),
+    move: Math.min(100, (bey.move ?? bey.atk ?? 50) + (buffs?.moveBonus ?? 0)),
+    def: Math.min(100, (bey.def ?? 50) + (buffs?.defBonus ?? 0)),
+    sta: Math.min(100, (bey.sta ?? 50) + (buffs?.staBonus ?? 0)),
+    orbitDrift: bey.orbitDrift,
   };
   body.userData.beyColor = beyColorHex(bey.color);
   body.userData.side = side;
+  const isAi = side === 'ai';
+  body.userData.spinSign = bey.leftSpin ? (isAi ? -0.95 : -1) : (isAi ? 0.95 : 1);
 }
 
 export function spawnRoundBodies(state, world, topMaterial) {
@@ -106,8 +127,8 @@ export function spawnRoundBodies(state, world, topMaterial) {
     ai: createAbilityRuntime(state.aiBey),
   };
 
-  stabilizeTop(state.playerBody, 0.15, 1, state.launchGrace);
-  stabilizeTop(state.aiBody, 0.15, -0.95, state.launchGrace);
+  stabilizeTop(state.playerBody, 0.15, state.playerBody.userData.spinSign ?? 1, state.launchGrace);
+  stabilizeTop(state.aiBody, 0.15, state.aiBody.userData.spinSign ?? -0.95, state.launchGrace);
   beginLaunchDrop(state.playerBody);
   beginLaunchDrop(state.aiBody);
   updateTopCollisions(state);
@@ -257,6 +278,8 @@ export function serverTick({
   tickLdragoAbilityVisuals(state, dt);
   tickLibraAbilityVisuals(state, dt);
   tickBullAbilityVisuals(state, dt);
+  tickStrikerAbilityVisuals(state, dt);
+  tickEagleAbilityVisuals(state, dt);
 
   events.push(...getFrameEvents());
 
