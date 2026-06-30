@@ -1,4 +1,4 @@
-import { BEYS, isBeyPlayable } from '../game/beys.js?v=18';
+import { BEYS, isBeyPlayable } from '../game/beys.js?v=19';
 import { assetUrl } from '../app/basePath.js';
 import { renderBeyPackagingStars } from './beyPackagingStars.js';
 import { MSG } from '../net/protocol.js';

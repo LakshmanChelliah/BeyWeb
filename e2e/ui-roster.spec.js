@@ -26,7 +26,7 @@ test.describe('Playable bey roster', () => {
   });
 
   test('beys.js is served with no-cache headers and full roster', async ({ request }) => {
-    const res = await request.get('/js/game/beys.js?v=18');
+    const res = await request.get('/js/game/beys.js?v=19');
     expect(res.ok()).toBeTruthy();
     const cacheControl = res.headers()['cache-control'] ?? '';
     expect(cacheControl).toMatch(/no-cache/i);
