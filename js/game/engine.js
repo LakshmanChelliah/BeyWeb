@@ -10,6 +10,8 @@ import {
   resetTopWobble,
   syncTopVisual,
   updateTopCollisions,
+  applyCenterPull,
+  pinTopToFloor,
   beginLaunchDrop,
   stepSleepOutTimers,
 } from '../physics/top.js';
@@ -31,8 +33,11 @@ import {
   tickAbilityVisuals,
   tickLeoneAbilityVisuals,
   tickLdragoAbilityVisuals,
+  tickDarkMoveVisuals,
   tickLibraAbilityVisuals,
   tickBullAbilityVisuals,
+  tickStrikerAbilityVisuals,
+  tickEagleAbilityVisuals,
   getCameraCue,
   resetStarBlastCamera,
   shouldStarBlastGlow,
@@ -47,11 +52,14 @@ import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
 import { createPegasusSpeedBoostVfx } from '../render/pegasusSpeedBoostVfx.js';
 import { createLdragoAbilityVfx } from '../render/ldragoAbilityVfx.js';
+import { createDarkMoveVfx } from '../render/darkMoveVfx.js';
 import { createLibraAbilityVfx } from '../render/libraAbilityVfx.js';
 import { createBullAbilityVfx } from '../render/bullAbilityVfx.js';
+import { createEagleAbilityVfx } from '../render/eagleAbilityVfx.js';
 import { createCollisionSparksVfx } from '../render/collisionSparksVfx.js';
 import { applySnapshotMeta } from '../net/snapshot.js';
 import { createInterpolator } from '../net/interpolation.js';
+import { createOnlineCollisionSync } from '../net/collisionSync.js';
 
 /**
  * Boots the shared game engine for PC (2-player) or mobile (gyro + AI).
@@ -80,6 +88,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     player: createLdragoAbilityVfx(scene),
     ai: createLdragoAbilityVfx(scene),
   };
+  const darkMoveVfx = {
+    player: createDarkMoveVfx(scene),
+    ai: createDarkMoveVfx(scene),
+  };
   const libraVfx = {
     player: createLibraAbilityVfx(scene),
     ai: createLibraAbilityVfx(scene),
@@ -87,6 +99,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
   const bullVfx = {
     player: createBullAbilityVfx(scene),
     ai: createBullAbilityVfx(scene),
+  };
+  const eagleVfx = {
+    player: createEagleAbilityVfx(scene),
+    ai: createEagleAbilityVfx(scene),
   };
   const collisionSparksVfx = createCollisionSparksVfx(scene);
 
@@ -99,10 +115,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     speedBoostVfx.ai.reset();
     ldragoVfx.player.reset();
     ldragoVfx.ai.reset();
+    darkMoveVfx.player.reset();
+    darkMoveVfx.ai.reset();
     libraVfx.player.reset();
     libraVfx.ai.reset();
     bullVfx.player.reset();
     bullVfx.ai.reset();
+    eagleVfx.player.reset();
+    eagleVfx.ai.reset();
     collisionSparksVfx.reset();
   }
 
@@ -172,8 +192,51 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
 
   const clock = new THREE.Clock();
   const netInterpolator = createInterpolator();
+  const onlineCollisionSync = createOnlineCollisionSync();
+  /** Collision sparks queued until after pose interpolation each frame. */
+  const pendingCollisionEvents = [];
   let lastSnapAt = 0;
   let lastServerTick = 0;
+  let netDebugStats = { localErr: 0, remoteErr: 0, snapsPerSec: 0 };
+  let onlineMotionFrames = 0;
+  let maxOnlineFrameDelta = 0;
+  let lastOnlineSamplePos = null;
+  let onlineMotionWarmupUntil = 0;
+
+  function resetOnlineMotionStats() {
+    onlineMotionFrames = 0;
+    maxOnlineFrameDelta = 0;
+    lastOnlineSamplePos = null;
+    onlineMotionWarmupUntil = 0;
+  }
+
+  function trackOnlineMotion() {
+    if (!onlineActive() || !state.gameRunning || state.gameFrozen) return;
+    const localBody = localSlot() === 0 ? state.playerBody : state.aiBody;
+    if (!localBody) return;
+    const x = localBody.position.x;
+    const z = localBody.position.z;
+    if (state.launchGrace > 0) {
+      lastOnlineSamplePos = null;
+      onlineMotionWarmupUntil = 0;
+      return;
+    }
+    const now = performance.now();
+    if (!onlineMotionWarmupUntil) {
+      onlineMotionWarmupUntil = now + 500;
+      lastOnlineSamplePos = null;
+    }
+    if (now < onlineMotionWarmupUntil) {
+      lastOnlineSamplePos = { x, z };
+      return;
+    }
+    if (lastOnlineSamplePos) {
+      const d = Math.hypot(x - lastOnlineSamplePos.x, z - lastOnlineSamplePos.z);
+      if (d > maxOnlineFrameDelta) maxOnlineFrameDelta = d;
+      onlineMotionFrames += 1;
+    }
+    lastOnlineSamplePos = { x, z };
+  }
 
   function onlineActive() {
     return isOnline?.() ?? false;
@@ -212,30 +275,50 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         }
       }
       if (ev.type === 'collision_spark') {
-        collisionSparksVfx.spawn(ev);
+        pendingCollisionEvents.push(ev);
+        continue;
+      }
+      if (ev.type === 'round_pending_ko') {
+        const loserBody = ev.loser === 1 ? state.playerBody : state.aiBody;
+        if (loserBody && !loserBody.userData.ringOut) {
+          beginRingOut(loserBody);
+        }
       }
     }
   }
 
+  function flushCollisionEvents() {
+    if (!pendingCollisionEvents.length) return;
+    for (const ev of pendingCollisionEvents) {
+      collisionSparksVfx.spawn(onlineCollisionSync.prepareSparkEvent(ev, state));
+    }
+    pendingCollisionEvents.length = 0;
+  }
+
   function applyNetSnapshot(msg) {
     if (onlineActive() && input.isAwaitingRoundReady?.()) return;
-    if (onlineActive() && !state.gameRunning && state.gameFrozen) return;
-    if (msg.tick != null && msg.tick <= lastServerTick) return;
-    if (msg.tick != null) lastServerTick = msg.tick;
+    if (onlineActive() && !state.gameRunning && state.gameFrozen && !state.pendingKo) return;
+    if (msg.tick != null) {
+      if (msg.tick <= lastServerTick) return;
+      // Drop buffered snapshots from the previous round (server tick resets after countdown).
+      if (lastServerTick === 0 && msg.tick > 128) return;
+      lastServerTick = msg.tick;
+    }
 
     lastSnapAt = performance.now();
     netInterpolator.pushSnapshot(msg);
     applySnapshotMeta(state, msg);
     handleNetEvents(msg.events);
-    updateHud();
-    updateAbilityHud();
   }
 
   function startOnlineRound() {
     if (!state.playerBody) spawnTops();
     netInterpolator.reset();
+    onlineCollisionSync.reset();
+    pendingCollisionEvents.length = 0;
     lastServerTick = 0;
     lastSnapAt = 0;
+    resetOnlineMotionStats();
     state.accumulator = 0;
     state.gameFrozen = false;
     state.pendingKo = null;
@@ -256,6 +339,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     resetMobileCameraFraming();
     resetAllAbilityVfx();
     netInterpolator.reset();
+    onlineCollisionSync.reset();
+    pendingCollisionEvents.length = 0;
     input.clearKeys?.();
     state.pendingKo = null;
     state.launchGrace = 0;
@@ -285,6 +370,40 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     state.gameRunning = false;
     freezeBodies();
     dom.gameoverOverlay.classList.add('visible');
+  }
+
+  function clearArenaTops() {
+    resetStarBlastCamera();
+    resetMobileCameraFraming();
+    resetAllAbilityVfx();
+    netInterpolator.reset();
+    onlineCollisionSync.reset();
+    pendingCollisionEvents.length = 0;
+    lastServerTick = 0;
+    lastSnapAt = 0;
+    input.clearKeys?.();
+    state.pendingKo = null;
+    state.launchGrace = 0;
+    state.gameRunning = false;
+    state.gameFrozen = true;
+    if (state.playerBody) {
+      world.removeBody(state.playerBody);
+      state.playerBody = null;
+    }
+    if (state.aiBody) {
+      world.removeBody(state.aiBody);
+      state.aiBody = null;
+    }
+    state.abilities = null;
+    playerGroup.clear();
+    aiGroup.clear();
+    for (const container of Object.values(dom.abilityBars)) {
+      container?.classList.remove('visible');
+      if (container) container.innerHTML = '';
+    }
+    dom.hud.classList.remove('visible');
+    dom.controlsHint?.classList.remove('visible');
+    dom.specialFlash?.classList.remove('flash-play');
   }
 
   function abilityKeyLabels() {
@@ -318,6 +437,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         `<span class="ability-cd"></span>` +
         `<span class="ability-icon">${ability.icon || ''}</span>` +
         `<span class="ability-name">${ability.name}</span>` +
+        (ability.subtitle ? `<span class="ability-subtitle">${ability.subtitle}</span>` : '') +
         (keyLabel ? `<span class="ability-key">${keyLabel}</span>` : '');
       btn.setAttribute('aria-label', `${ability.name}${keyLabel ? ` (${keyLabel})` : ''}`);
       btn.addEventListener('click', () => triggerAbility(hudSide, slotName));
@@ -384,6 +504,19 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         const intensity = repulse > 0 ? Math.max(base, 2.0 + repulse * 1.1) : base;
         return { color: sp.ability.glow, intensity };
       }
+      if (sp.ability.id === 'ldrago_soaring_bite_strike') {
+        const windup = body?.userData.darkMoveWindup;
+        const phase = body?.userData.darkMovePhase;
+        const beam = body?.userData.darkMoveBeamActive;
+        const dive = phase === 'strike' && body?.userData.darkMoveStrikeSub === 'dive';
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.012);
+        let intensity = pulse * 1.4;
+        if (windup) intensity = Math.max(intensity, pulse * 1.75);
+        if (beam) intensity = Math.max(intensity, pulse * 2.1);
+        if (dive) intensity = Math.max(intensity, 2.2 + (body?.userData.darkMoveStrikeDiveT ?? 0) * 1.4);
+        if (phase === 'rise') intensity = Math.max(intensity, pulse * 1.55);
+        return { color: sp.ability.glow, intensity };
+      }
       if (sp.ability.id === 'libra_sonic_buster') {
         const channeling = body?.userData.sonicBusterWindup || body?.userData.sonicBuster;
         const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.02);
@@ -399,6 +532,24 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         const intense =
           sp.windupRemaining > 0 || phase === 'windup' || phase === 'dash';
         return { color: sp.ability.glow, intensity: intense ? pulse * 1.55 : pulse * 0.9 };
+      }
+      if (sp.ability.id === 'striker_lightning_flash') {
+        if (body?.userData.strikerImpactFlash) {
+          return { color: '#fef3c7', intensity: 2.35 };
+        }
+        const phase = body?.userData.strikerFlashPhase;
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.014);
+        const intense = sp.windupRemaining > 0 || phase === 'windup' || phase === 'dash';
+        return { color: sp.ability.glow, intensity: intense ? pulse * 1.55 : pulse * 0.95 };
+      }
+      if (sp.ability.id === 'eagle_diving_crush') {
+        if (body?.userData.eagleImpactFlash) {
+          return { color: '#fef3c7', intensity: 2.4 };
+        }
+        const phase = body?.userData.eagleDivePhase;
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.014);
+        const intense = sp.windupRemaining > 0 || phase === 'hover' || phase === 'dive';
+        return { color: sp.ability.glow, intensity: intense ? pulse * 1.65 : pulse * 1.05 };
       }
       return { color: sp.ability.glow, intensity: 1.0 };
     }
@@ -419,6 +570,10 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         const intensity = burst > 0 ? Math.max(base, 1.4 + burst * 0.8) : base;
         return { color: pw.ability.glow, intensity };
       }
+      if (pw.ability.id === 'ldrago_upper_mode') {
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.013);
+        return { color: pw.ability.glow, intensity: pulse * 1.7 };
+      }
       if (pw.ability.id === 'libra_sonic_shield') {
         const burst = body?.userData.sonicShieldBurstT ?? 0;
         const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.01);
@@ -429,6 +584,15 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       if (pw.ability.id === 'bull_maximum_stampede') {
         const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.013);
         return { color: pw.ability.glow, intensity: pulse * 1.2 };
+      }
+      if (pw.ability.id === 'striker_blitz_charge') {
+        const pulse = 0.68 + 0.32 * Math.sin(performance.now() * 0.015);
+        return { color: pw.ability.glow, intensity: pulse * 1.25 };
+      }
+      if (pw.ability.id === 'eagle_counter_stance') {
+        const flash = body?.userData.eagleCounterFlashT ?? 0;
+        const pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.016);
+        return { color: pw.ability.glow, intensity: Math.max(pulse * 1.05, flash * 2.1) };
       }
       return { color: pw.ability.glow, intensity: 0.55 };
     }
@@ -585,20 +749,23 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     state.playerBey = playerBey;
     state.aiBey = aiBey;
 
-    const stampBody = (body, bey) => {
+    const stampBody = (body, bey, side) => {
       body.userData.beyStats = {
         id: bey.id,
         atk: bey.atk ?? 50,
         move: bey.move ?? bey.atk ?? 50,
         def: bey.def ?? 50,
         sta: bey.sta ?? 50,
+        orbitDrift: bey.orbitDrift,
       };
       body.userData.beyColor = beyColorHex(bey.color);
+      body.userData.spinSign = bey.leftSpin
+        ? (side === 'ai' ? -0.95 : -1)
+        : (side === 'ai' ? 0.95 : 1);
     };
 
-    // Stamp bey stats onto sim bodies (player=slot0, ai=slot1).
-    stampBody(state.playerBody, playerBey);
-    stampBody(state.aiBody, aiBey);
+    stampBody(state.playerBody, playerBey, 'player');
+    stampBody(state.aiBody, aiBey, 'ai');
 
     // Tag sides and build ability runtimes aligned to sim bodies.
     state.playerBody.userData.side = 'player';
@@ -614,10 +781,12 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     buildAbilityButtons('player');
     buildAbilityButtons('ai');
 
-    stabilizeTop(state.playerBody, 0.15, 1, state.launchGrace);
-    stabilizeTop(state.aiBody, 0.15, -0.95, state.launchGrace);
-    beginLaunchDrop(state.playerBody);
-    beginLaunchDrop(state.aiBody);
+    stabilizeTop(state.playerBody, 0.15, state.playerBody.userData.spinSign ?? 1, state.launchGrace);
+    stabilizeTop(state.aiBody, 0.15, state.aiBody.userData.spinSign ?? -0.95, state.launchGrace);
+    if (!onlineActive()) {
+      beginLaunchDrop(state.playerBody);
+      beginLaunchDrop(state.aiBody);
+    }
     updateTopCollisions(state);
     updateHud();
     updateAvatars();
@@ -674,16 +843,39 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     requestAnimationFrame(gameLoop);
     const dt = Math.min(clock.getDelta(), 0.05);
 
-    if (state.gameRunning && !state.gameFrozen) {
+    const onlineSimActive =
+      onlineActive() && ((state.gameRunning && !state.gameFrozen) || state.pendingKo);
+
+    if (onlineSimActive || (!onlineActive() && state.gameRunning && !state.gameFrozen)) {
       if (onlineActive()) {
-        updateTopCollisions(state);
-        state.accumulator += dt;
-        while (state.accumulator >= CONFIG.FIXED_DT) {
-          stepPhysics();
-          state.accumulator -= CONFIG.FIXED_DT;
+        input.applySteering?.(state);
+        const steering = input.predictLocalForces?.(state) ?? false;
+        const ls = localSlot();
+        const localBody = ls === 0 ? state.playerBody : state.aiBody;
+        const localInCinematic =
+          localBody?.userData?.controlLocked ||
+          localBody?.userData?.eagleDivePhase != null ||
+          localBody?.userData?.eagleDiveWindup;
+        if (!state.pendingKo && state.launchGrace <= 0 && !localInCinematic) {
+          world.step(Math.min(dt, 0.033));
+          pinTopToFloor(localBody);
         }
-        const steerMag = input.getSteerMag?.() ?? 0;
-        netInterpolator.update(dt, state, localSlot(), { steerMag });
+        updateTopCollisions(state);
+        netDebugStats = netInterpolator.update(dt, state, localSlot(), { steering });
+        flushCollisionEvents();
+        trackOnlineMotion();
+        syncSpecialFlashOverlay();
+        updateHud();
+        updateAbilityHud();
+        input.onNetFrame?.({
+          snapAge: lastSnapAt ? performance.now() - lastSnapAt : 0,
+          dt,
+          serverTick: lastServerTick,
+          interpDelay: netInterpolator.delayTicks,
+          localErr: netDebugStats.localErr,
+          remoteErr: netDebugStats.remoteErr,
+          snapsPerSec: netDebugStats.snapsPerSec,
+        });
       } else {
       if (state.launchGrace > 0) {
         state.launchGrace = Math.max(0, state.launchGrace - dt);
@@ -731,8 +923,11 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       tickAbilityVisuals(state, dt);
       tickLeoneAbilityVisuals(state, dt);
       tickLdragoAbilityVisuals(state, dt);
+      tickDarkMoveVisuals(state, dt);
       tickLibraAbilityVisuals(state, dt);
       tickBullAbilityVisuals(state, dt);
+      tickStrikerAbilityVisuals(state, dt);
+      tickEagleAbilityVisuals(state, dt);
       trackSleepers(state);
       updateHud();
       updateAbilityHud();
@@ -758,18 +953,6 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         }
       }
       } // end local physics
-
-      if (onlineActive()) {
-        syncSpecialFlashOverlay();
-        updateHud();
-        updateAbilityHud();
-        input.onNetFrame?.({
-          snapAge: lastSnapAt ? performance.now() - lastSnapAt : 0,
-          dt,
-          serverTick: lastServerTick,
-          interpDelay: netInterpolator.delayTicks,
-        });
-      }
     }
 
     updateAbilityVisuals();
@@ -781,7 +964,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         state.playerSpin,
         state.playerVisualYaw,
         dt,
-        1,
+        state.playerBody.userData.spinSign ?? 1,
         state
       );
     }
@@ -792,7 +975,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
         state.aiSpin,
         state.aiVisualYaw,
         dt,
-        -0.95,
+        state.aiBody.userData.spinSign ?? -0.95,
         state
       );
     }
@@ -808,10 +991,14 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     speedBoostVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     ldragoVfx.player.update(playerGroup, state.playerBody, camera, dt);
     ldragoVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    darkMoveVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    darkMoveVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     libraVfx.player.update(playerGroup, state.playerBody, camera, dt);
     libraVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     bullVfx.player.update(playerGroup, state.playerBody, camera, dt);
     bullVfx.ai.update(aiGroup, state.aiBody, camera, dt);
+    eagleVfx.player.update(playerGroup, state.playerBody, camera, dt);
+    eagleVfx.ai.update(aiGroup, state.aiBody, camera, dt);
     collisionSparksVfx.update(camera, dt);
 
     if (!state.gameFrozen) {
@@ -837,6 +1024,16 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     applyNetSnapshot,
     startOnlineRound,
     endOnlineRound,
+    clearArenaTops,
+    getOnlineMotionStats() {
+      return {
+        frames: onlineMotionFrames,
+        maxFrameDelta: maxOnlineFrameDelta,
+        localErr: netDebugStats.localErr,
+        remoteErr: netDebugStats.remoteErr,
+        snapsPerSec: netDebugStats.snapsPerSec,
+      };
+    },
     endOfflineMatch: endGame,
     tearDownOnlineMatch,
     setNetRtt(ms) {

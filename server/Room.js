@@ -1,5 +1,5 @@
 import { CONFIG } from '../js/config.js';
-import { getBeyById } from '../js/game/beys.js';
+import { getBeyById, isBeyPlayable } from '../js/game/beys.js';
 import {
   createMatchEnvironment,
   serverTick,
@@ -42,7 +42,20 @@ export class Room {
     this.slots[slot] = ws;
     ws.room = this;
     ws.slot = slot;
-    this.lastInputAt[slot] = Date.now();
+    this.touchPlayerActivity(slot);
+  }
+
+  touchPlayerActivity(slot) {
+    if (slot === 0 || slot === 1) {
+      this.lastInputAt[slot] = Date.now();
+    }
+  }
+
+  touchAllPlayerActivity() {
+    const now = Date.now();
+    for (let s = 0; s < 2; s++) {
+      if (this.slots[s]) this.lastInputAt[s] = now;
+    }
   }
 
   removePlayer(ws) {
@@ -75,6 +88,7 @@ export class Room {
     return {
       type: MSG.PICK_STATUS,
       slots: this.locks.map((l) => (l.locked ? 'locked' : 'choosing')),
+      beyIds: this.locks.map((l) => l.beyId),
     };
   }
 
@@ -85,6 +99,11 @@ export class Room {
         break;
       case MSG.UNLOCK_BEY:
         this.unlockBey(ws.slot);
+        break;
+      case MSG.SYNC_PICKS:
+        if (this.state === 'picking' || this.state === 'waiting') {
+          this.send(ws, this.pickStatusPayload());
+        }
         break;
       case MSG.INPUT: {
         if (this.state !== 'playing') break;
@@ -139,8 +158,18 @@ export class Room {
   }
 
   lockBey(slot, beyId) {
+    if (slot !== 0 && slot !== 1) return;
     if (this.state !== 'picking' && this.state !== 'waiting') return;
-    if (!getBeyById(beyId)) return;
+    const bey = getBeyById(beyId);
+    if (!bey || !isBeyPlayable(bey)) {
+      this.send(this.slots[slot], {
+        type: MSG.LOCK_BEY_REJECTED,
+        beyId,
+        message: 'That bey cannot be selected. Restart the game server if you recently updated.',
+      });
+      return;
+    }
+    this.touchPlayerActivity(slot);
     this.locks[slot] = { beyId, locked: true };
     this.broadcastAll(this.pickStatusPayload());
     if (this.locks[0].locked && this.locks[1].locked) {
@@ -157,6 +186,7 @@ export class Room {
 
   beginRevealAndCountdown() {
     this.state = 'countdown';
+    this.touchAllPlayerActivity();
     this.matchSeed = hashSeed(this.id, this.locks[0].beyId, this.locks[1].beyId);
     this.broadcastAll({
       type: MSG.MATCH_CONFIG,
@@ -288,6 +318,7 @@ export class Room {
       respawnRound(this.match);
       this.tick = 0;
       this.state = 'playing';
+      this.touchAllPlayerActivity();
       if (this.match?.state) this.match.state.gameRunning = true;
       this.startGameLoop();
     });
@@ -303,6 +334,7 @@ export class Room {
     });
     this.tick = 0;
     this.state = 'playing';
+    this.touchAllPlayerActivity();
     this.startGameLoop();
   }
 
@@ -312,7 +344,7 @@ export class Room {
     this.loopLastAt = Date.now();
     this.loopAccumulator = 0;
 
-    const run = () => {
+    this.loopHandle = setInterval(() => {
       if (!this.loopHandle) return;
 
       const now = Date.now();
@@ -327,17 +359,12 @@ export class Room {
         this.loopAccumulator -= stepMs;
         steps += 1;
       }
-
-      const drift = Date.now() - now;
-      this.loopHandle = setTimeout(run, Math.max(1, stepMs - drift));
-    };
-
-    this.loopHandle = setTimeout(run, stepMs);
+    }, stepMs);
   }
 
   stopGameLoop() {
     if (this.loopHandle) {
-      clearTimeout(this.loopHandle);
+      clearInterval(this.loopHandle);
       this.loopHandle = null;
     }
     this.loopAccumulator = 0;
@@ -372,10 +399,13 @@ export class Room {
   tickMatch() {
     if (!this.match || this.state !== 'playing') return;
 
-    for (let s = 0; s < 2; s++) {
-      if (this.slots[s] && Date.now() - this.lastInputAt[s] > FORFEIT_MS) {
-        this.forfeit(1 - s);
-        return;
+    const launchGrace = this.match.state?.launchGrace ?? 0;
+    if (launchGrace <= 0) {
+      for (let s = 0; s < 2; s++) {
+        if (this.slots[s] && Date.now() - this.lastInputAt[s] > FORFEIT_MS) {
+          this.forfeit(1 - s);
+          return;
+        }
       }
     }
 

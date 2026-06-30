@@ -4,7 +4,9 @@ import { getBeyById } from './beys.js';
 export const CAMPAIGN_OPPONENT_IDS = Object.freeze([
   'bull',    // Dark Bull
   'libra',   // Flame Libra
+  'eagle',   // Earth Eagle
   'leone',   // Rock Leone
+  'striker', // Ray Striker
   'pegasus', // Storm Pegasus
   'ldrago',  // Meteo L-Drago
 ]);

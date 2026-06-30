@@ -1,7 +1,5 @@
-import { MSG, WINS_NEEDED } from '../net/protocol.js';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js';
 import { getBeyOrDefault } from './beys.js';
-
-const MAX_ROUNDS = 3;
 
 function winnerToSlot(winner) {
   if (winner === 1) return 0;
@@ -10,7 +8,7 @@ function winnerToSlot(winner) {
 }
 
 /**
- * Online best-of-3 series UI controller (mirrors campaignController patterns).
+ * Online best-of-5 (first to 3) series UI controller.
  */
 export function createOnlineController({
   campaignHud,
@@ -38,6 +36,7 @@ export function createOnlineController({
   let roundResults = [];
   let countdownHideTimer = null;
   let rematchStartCommitted = false;
+  let countdownArenaPrepared = false;
 
   let roundStartCommitted = false;
   let readyStatusEl = document.getElementById('gameover-ready');
@@ -63,6 +62,7 @@ export function createOnlineController({
     readyCount = 0;
     awaitingBothReady = false;
     countdownAuthorized = false;
+    countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
     updateHud();
@@ -77,6 +77,7 @@ export function createOnlineController({
     readyCount = 0;
     awaitingBothReady = false;
     countdownAuthorized = false;
+    countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
     campaignHud?.classList.add('hidden');
@@ -100,13 +101,20 @@ export function createOnlineController({
   function renderScoreLights() {
     if (!campaignHud || !active) return;
     const lights = [];
-    for (let i = 0; i < MAX_ROUNDS; i++) {
+    for (let i = 0; i < SERIES_MAX_ROUNDS; i++) {
       const result = roundResults[i];
       const state = result ?? 'pending';
       const label = result === 'win' ? 'Round won' : result === 'loss' ? 'Round lost' : result === 'draw' ? 'Draw' : 'Upcoming round';
       lights.push(`<span class="score-light score-light--${state}" title="${label}" aria-label="${label}"></span>`);
     }
-    campaignHud.innerHTML = `<div class="online-score-lights" aria-label="Your series">${lights.join('')}</div>`;
+    const youWins = scores[localSlot] ?? 0;
+    const oppWins = scores[1 - localSlot] ?? 0;
+    campaignHud.innerHTML = `
+      <div class="online-series-hud" aria-label="Best of ${SERIES_MAX_ROUNDS}, first to ${WINS_NEEDED} wins">
+        <span class="online-series-label">Best of ${SERIES_MAX_ROUNDS} · First to ${WINS_NEEDED}</span>
+        <div class="online-score-lights">${lights.join('')}</div>
+        <span class="online-series-score">${youWins}–${oppWins}</span>
+      </div>`;
     campaignHud.classList.remove('hidden');
   }
 
@@ -162,7 +170,7 @@ export function createOnlineController({
   }
 
   function recordRoundResult(msg) {
-    if (roundResults.length >= MAX_ROUNDS) return;
+    if (roundResults.length >= SERIES_MAX_ROUNDS) return;
     if (msg.isDraw) {
       roundResults.push('draw');
       return;
@@ -205,7 +213,16 @@ export function createOnlineController({
       clearTimeout(countdownHideTimer);
       countdownHideTimer = null;
     }
+    countdownArenaPrepared = false;
     document.getElementById('countdown-overlay')?.classList.remove('visible', 'countdown-overlay--rip');
+  }
+
+  function prepareCountdownArena(gameRef) {
+    if (countdownArenaPrepared) return;
+    countdownArenaPrepared = true;
+    onMatchStarting?.();
+    gameoverOverlay?.classList.remove('visible');
+    gameRef.clearArenaTops?.();
   }
 
   function tryStartNextRound(gameRef) {
@@ -269,13 +286,17 @@ export function createOnlineController({
     });
 
     netClient.on(MSG.COUNTDOWN, (msg) => {
-      if (canShowCountdown()) {
+      if (!canShowCountdown()) return;
+
+      if (msg.seconds > 0) {
+        prepareCountdownArena(gameRef);
         showCountdown(msg.seconds);
+        return;
       }
+
+      showCountdown(msg.seconds);
+      countdownArenaPrepared = false;
       tryStartNextRound(gameRef);
-      if (msg.seconds === 0 && !gameRef.state.gameRunning) {
-        tryStartNextRound(gameRef);
-      }
     });
 
     netClient.on(MSG.SNAPSHOT, (msg) => {
@@ -300,6 +321,7 @@ export function createOnlineController({
       restartAction = 'next-round';
       awaitingBothReady = true;
       countdownAuthorized = false;
+      countdownArenaPrepared = false;
       roundStartCommitted = false;
       rematchStartCommitted = false;
       hideCountdown();
@@ -316,12 +338,8 @@ export function createOnlineController({
         || (msg.slots?.[0] === true && msg.slots?.[1] === true);
       countdownAuthorized = bothReady;
       paintReadyButton();
-      if (bothReady && awaitingBothReady) {
-        if (restartAction === 'rematch') {
-          tryBeginRematchPicking();
-        } else {
-          tryStartNextRound(gameRef);
-        }
+      if (bothReady && awaitingBothReady && restartAction === 'rematch') {
+        tryBeginRematchPicking();
       }
     });
 
@@ -441,4 +459,4 @@ export function createOnlineController({
   };
 }
 
-export { WINS_NEEDED };
+export { WINS_NEEDED, SERIES_MAX_ROUNDS };

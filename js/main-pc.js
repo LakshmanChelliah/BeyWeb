@@ -41,7 +41,7 @@ createAppBootstrap({
     if (controlsHint) {
       if (online) {
         controlsHint.innerHTML =
-          'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special · Best of 3';
+          'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special · Best of 5 (first to 3)';
       } else if (vsCpu) {
         controlsHint.innerHTML = 'WASD to steer · <kbd>Q</kbd> power · <kbd>E</kbd> special';
       } else {
@@ -153,6 +153,9 @@ createAppBootstrap({
       getSteerMag() {
         return remote.getSteerMag();
       },
+      getSteer() {
+        return remote.getSteer();
+      },
       applySteering(state) {
         if (getIsOnline()) {
           const s = steerFromKeys(keyState, PC_STEER_MAP);
@@ -169,10 +172,17 @@ createAppBootstrap({
           keyboard.applyPlayer2Steer(state.aiBody, state.aiSpin);
         }
       },
-      onNetFrame({ snapAge, dt, serverTick, interpDelay }) {
-        netDebug.update({ snapAge, serverTick, interpDelayTicks: interpDelay });
+      onNetFrame({ snapAge, dt, serverTick, interpDelay, localErr, remoteErr, snapsPerSec }) {
+        netDebug.update({
+          snapAge,
+          serverTick,
+          interpDelayTicks: interpDelay,
+          localErr,
+          remoteErr,
+          snapsPerSec,
+        });
         pingTimer += dt ?? 0;
-        if (pingTimer < 2) return;
+        if (pingTimer < 1) return;
         pingTimer = 0;
         if (!getIsOnline()) return;
         netClient.ping().then((result) => {

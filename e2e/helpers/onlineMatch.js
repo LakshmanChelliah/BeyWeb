@@ -169,7 +169,7 @@ export async function forceSeriesEnd(host, guest) {
   if (!endedOnServer) {
     const seriesEndMsg = {
       winner: 0,
-      scores: [2, 0],
+      scores: [3, 0],
       forfeit: false,
     };
     for (const page of [host, guest]) {

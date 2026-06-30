@@ -23,8 +23,11 @@ import {
   tickAbilityVisuals,
   tickLeoneAbilityVisuals,
   tickLdragoAbilityVisuals,
+  tickDarkMoveVisuals,
   tickLibraAbilityVisuals,
   tickBullAbilityVisuals,
+  tickStrikerAbilityVisuals,
+  tickEagleAbilityVisuals,
 } from './abilities.js';
 import { evaluateWin } from './rules.js';
 import { beginRingOut, isRingOutCinematicDone } from '../physics/ringOut.js';
@@ -58,6 +61,15 @@ export const SYNC_USER_DATA_KEYS = [
   'bullCoastNx', 'bullCoastNz', 'bullCoastTargetX', 'bullCoastTargetZ', 'bullCoastDist',
   'bullChargeFromX', 'bullChargeFromZ',
   'leoneGuardT', 'leoneGuardActive',
+  'counterStance', 'eagleCounterT', 'eagleCounterFlashT', 'eagleCounterFromX', 'eagleCounterFromZ',
+  'eagleDivePhase', 'eagleDivePhaseT', 'eagleDiveHit', 'eagleImpactFlash', 'eagleDiveWindup', 'eagleDiveSlamming',
+  'strikerFlashPhase', 'strikerFlashPhaseT', 'strikerSlamming', 'strikerFlashHit', 'strikerImpactFlash',
+  'strikerDashDone', 'strikerCoastTargetX', 'strikerCoastTargetZ', 'strikerCoastNx', 'strikerCoastNz',
+  'ldragoUpperMode', 'atkCombatMultMult', 'spinSign',
+  'darkMovePhase', 'darkMovePhaseT', 'darkMoveStrikeIdx', 'darkMoveStrikeSub',
+  'darkMoveHits', 'darkMoveOrbT', 'darkMoveOrbFade', 'darkMoveAnchorX', 'darkMoveAnchorZ',
+  'darkMoveProjX', 'darkMoveProjZ', 'darkMoveProjLift', 'darkMoveBeamActive', 'darkMoveWindup',
+  'darkMoveStrikeDiveT', 'darkMoveResolved', 'darkMoveDamageApplied', 'darkMoveSlamming',
 ];
 
 function stampBeyStats(body, bey, side) {
@@ -67,9 +79,11 @@ function stampBeyStats(body, bey, side) {
     move: bey.move ?? bey.atk ?? 50,
     def: bey.def ?? 50,
     sta: bey.sta ?? 50,
+    orbitDrift: bey.orbitDrift,
   };
   body.userData.beyColor = beyColorHex(bey.color);
   body.userData.side = side;
+  body.userData.spinSign = bey.leftSpin ? (side === 'ai' ? -0.95 : -1) : (side === 'ai' ? 0.95 : 1);
 }
 
 export function spawnRoundBodies(state, world, topMaterial) {
@@ -106,8 +120,8 @@ export function spawnRoundBodies(state, world, topMaterial) {
     ai: createAbilityRuntime(state.aiBey),
   };
 
-  stabilizeTop(state.playerBody, 0.15, 1, state.launchGrace);
-  stabilizeTop(state.aiBody, 0.15, -0.95, state.launchGrace);
+  stabilizeTop(state.playerBody, 0.15, state.playerBody.userData.spinSign ?? 1, state.launchGrace);
+  stabilizeTop(state.aiBody, 0.15, state.aiBody.userData.spinSign ?? -0.95, state.launchGrace);
   beginLaunchDrop(state.playerBody);
   beginLaunchDrop(state.aiBody);
   updateTopCollisions(state);
@@ -136,6 +150,7 @@ export function createMatchEnvironment({ playerBey, aiBey, seed }) {
     (event) => {
       frameEvents.push({
         type: 'collision_spark',
+        kind: event.kind,
         x: event.x,
         z: event.z,
         nx: event.nx,
@@ -145,6 +160,7 @@ export function createMatchEnvironment({ playerBey, aiBey, seed }) {
         colorB: event.colorB,
         special: event.special,
         sustained: event.sustained,
+        countMult: event.countMult,
       });
     }
   );
@@ -255,8 +271,11 @@ export function serverTick({
   tickAbilityVisuals(state, dt);
   tickLeoneAbilityVisuals(state, dt);
   tickLdragoAbilityVisuals(state, dt);
+  tickDarkMoveVisuals(state, dt);
   tickLibraAbilityVisuals(state, dt);
   tickBullAbilityVisuals(state, dt);
+  tickStrikerAbilityVisuals(state, dt);
+  tickEagleAbilityVisuals(state, dt);
 
   events.push(...getFrameEvents());
 

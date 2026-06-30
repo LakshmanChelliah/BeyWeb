@@ -74,7 +74,7 @@ createAppBootstrap({
     document.body.classList.toggle('vs-online', online);
     document.getElementById('btn-change-bey')?.classList.toggle('hidden', online);
     if (tiltHint && online) {
-      tiltHint.textContent = 'Tilt to steer · Tap moves · Best of 3 online';
+      tiltHint.textContent = 'Tilt to steer · Tap moves · Best of 5 online (first to 3)';
     }
   },
   queryUiOptions: {
@@ -141,6 +141,9 @@ createAppBootstrap({
       getSteerMag() {
         return remote.getSteerMag();
       },
+      getSteer() {
+        return remote.getSteer();
+      },
       applySteering(state) {
         if (getIsOnline()) {
           syncGyroSteer(state);
@@ -153,10 +156,17 @@ createAppBootstrap({
         applyAISteering(state.aiBody, state.playerBody, state.aiSpin, state.playerSpin);
         tickAIAbilities(state, (slot) => getGameRef().triggerAbility('ai', slot));
       },
-      onNetFrame({ snapAge, dt, serverTick, interpDelay }) {
-        netDebug.update({ snapAge, serverTick, interpDelayTicks: interpDelay });
+      onNetFrame({ snapAge, dt, serverTick, interpDelay, localErr, remoteErr, snapsPerSec }) {
+        netDebug.update({
+          snapAge,
+          serverTick,
+          interpDelayTicks: interpDelay,
+          localErr,
+          remoteErr,
+          snapsPerSec,
+        });
         pingTimer += dt ?? 0;
-        if (pingTimer < 2) return;
+        if (pingTimer < 1) return;
         pingTimer = 0;
         if (!getIsOnline()) return;
         netClient.ping().then((result) => {

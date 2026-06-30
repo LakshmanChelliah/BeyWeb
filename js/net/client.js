@@ -130,6 +130,10 @@ export function createNetClient({ onMessage, onStatus } = {}) {
     send({ type: MSG.LOCK_BEY, beyId });
   }
 
+  function syncPicks() {
+    send({ type: MSG.SYNC_PICKS });
+  }
+
   function unlockBey() {
     send({ type: MSG.UNLOCK_BEY });
   }
@@ -179,6 +183,7 @@ export function createNetClient({ onMessage, onStatus } = {}) {
     joinRoom,
     autoJoin,
     lockBey,
+    syncPicks,
     unlockBey,
     sendReady,
     sendInput,

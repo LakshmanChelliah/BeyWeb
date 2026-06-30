@@ -1,5 +1,4 @@
 import { BEYS, isBeyPlayable } from '../game/beys.js';
-import { ABILITY_REGISTRY } from '../game/abilities.js';
 import { renderBeyPackagingStars } from './beyPackagingStars.js';
 import { MSG } from '../net/protocol.js';
 
@@ -12,12 +11,17 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
   let locked = false;
   let opponentStatus = 'choosing';
   let selectedBey = null;
+  let pendingLock = false;
 
   root.innerHTML = `
     <div class="online-select">
       <div class="online-select-header">
         <h2 class="online-select-title">Choose Your Bey</h2>
         <p class="online-select-hint" id="select-hint">Browse with arrows, then lock in your pick</p>
+        <p class="online-your-status" id="your-status" aria-live="polite">
+          <span class="online-opponent-status-dot" aria-hidden="true"></span>
+          <span class="online-your-status-text">You: Choosing…</span>
+        </p>
         <p class="online-opponent-status" id="rival-status" aria-live="polite">
           <span class="online-opponent-status-dot" aria-hidden="true"></span>
           <span class="online-opponent-status-text">Opponent: Choosing…</span>
@@ -38,6 +42,8 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
   const mount = root.querySelector('.online-carousel-mount');
   const lockBtn = root.querySelector('#btn-lock');
   const unlockBtn = root.querySelector('#btn-unlock');
+  const yourStatus = root.querySelector('#your-status');
+  const yourStatusText = root.querySelector('.online-your-status-text');
   const rivalStatus = root.querySelector('#rival-status');
   const rivalStatusText = root.querySelector('.online-opponent-status-text');
   const hintEl = root.querySelector('#select-hint');
@@ -65,6 +71,13 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
     return `<span>${bey.name.charAt(0)}</span>`;
   }
 
+  function focusBey(beyId) {
+    const idx = ROSTER.findIndex((b) => b.id === beyId);
+    if (idx < 0) return;
+    currentIndex = idx;
+    selectedBey = ROSTER[idx];
+  }
+
   const cards = ROSTER.map((bey, i) => {
     const item = document.createElement('div');
     item.className = 'bey-item';
@@ -78,6 +91,12 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
     carousel.appendChild(item);
     const dot = document.createElement('div');
     dot.className = 'carousel-dot';
+    dot.addEventListener('click', () => {
+      if (locked) return;
+      currentIndex = i;
+      selectedBey = bey;
+      render();
+    });
     indicators.appendChild(dot);
     item.addEventListener('click', () => {
       if (!locked) {
@@ -100,19 +119,28 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
       const z = Math.cos(rad) * radius - radius;
       const scale = isCenter ? 1.05 : 0.78;
       item.style.transform = `translateX(${x}px) translateZ(${z}px) scale(${scale})`;
-      item.style.opacity = String(Math.max(0.2, (z + radius) / radius));
+      item.style.opacity = '1';
+      item.style.filter = isCenter ? 'none' : 'brightness(0.82)';
       item.style.pointerEvents = locked ? 'none' : isCenter ? 'auto' : 'none';
       item.querySelector('.bey-card')?.classList.toggle('active', isCenter && !locked);
     });
     indicators.querySelectorAll('.carousel-dot').forEach((d, i) => {
       d.classList.toggle('on', i === currentIndex);
     });
-    lockBtn.disabled = locked || !selectedBey;
+    lockBtn.disabled = locked || pendingLock || !selectedBey;
     lockBtn.classList.toggle('locked', locked);
-    lockBtn.textContent = locked ? 'Locked In ✓' : 'Lock In';
+    lockBtn.textContent = pendingLock ? 'Locking…' : locked ? 'Locked In ✓' : 'Lock In';
     unlockBtn.classList.toggle('hidden', !locked || opponentStatus === 'locked');
     const oppReady = opponentStatus === 'locked';
     rivalStatus?.classList.toggle('rival-locked', oppReady);
+    yourStatus?.classList.toggle('rival-locked', locked);
+    if (yourStatusText) {
+      yourStatusText.textContent = locked && selectedBey
+        ? `You locked in ${selectedBey.name} ✓`
+        : pendingLock && selectedBey
+          ? `Locking in ${selectedBey.name}…`
+          : 'You: Choosing…';
+    }
     if (rivalStatusText) {
       rivalStatusText.textContent = oppReady ? 'Opponent: Locked in ✓' : 'Opponent: Choosing…';
     }
@@ -121,29 +149,44 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
         hintEl.textContent = opponentStatus === 'locked'
           ? 'Both locked in — starting match…'
           : 'Waiting for opponent to lock in…';
+      } else if (pendingLock) {
+        hintEl.textContent = 'Confirming your pick with the server…';
       } else {
         hintEl.textContent = 'Browse with arrows, then lock in your pick';
       }
     }
   }
 
+  function applyPickStatus(msg) {
+    const slot = netClient.slot ?? 0;
+    const oppSlot = slot === 0 ? 1 : 0;
+    opponentStatus = msg.slots?.[oppSlot] ?? 'choosing';
+    locked = msg.slots?.[slot] === 'locked';
+    pendingLock = false;
+    const myBeyId = msg.beyIds?.[slot];
+    if (locked && myBeyId) {
+      focusBey(myBeyId);
+    }
+    render();
+  }
+
   prevBtn.addEventListener('click', () => {
-    if (locked) return;
+    if (locked || pendingLock) return;
     currentIndex = (currentIndex - 1 + ROSTER.length) % ROSTER.length;
     selectedBey = ROSTER[currentIndex];
     render();
   });
   nextBtn.addEventListener('click', () => {
-    if (locked) return;
+    if (locked || pendingLock) return;
     currentIndex = (currentIndex + 1) % ROSTER.length;
     selectedBey = ROSTER[currentIndex];
     render();
   });
 
   lockBtn.addEventListener('click', () => {
-    if (!selectedBey || locked) return;
+    if (!selectedBey || locked || pendingLock) return;
     onPrepareMotion?.();
-    locked = true;
+    pendingLock = true;
     netClient.lockBey(selectedBey.id);
     render();
   });
@@ -151,17 +194,23 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
   unlockBtn.addEventListener('click', () => {
     if (!locked || opponentStatus === 'locked') return;
     locked = false;
+    pendingLock = false;
     netClient.unlockBey();
     render();
   });
 
-  netClient.on(MSG.PICK_STATUS, (msg) => {
-    const opp = netClient.slot === 0 ? msg.slots[1] : msg.slots[0];
-    opponentStatus = opp;
+  const offPickStatus = netClient.on(MSG.PICK_STATUS, applyPickStatus);
+
+  const offLockRejected = netClient.on(MSG.LOCK_BEY_REJECTED, (msg) => {
+    locked = false;
+    pendingLock = false;
+    if (hintEl) {
+      hintEl.textContent = msg.message || 'Could not lock in that bey. Try another or restart the game server.';
+    }
     render();
   });
 
-  netClient.on(MSG.MATCH_CONFIG, (msg) => {
+  const offMatchConfig = netClient.on(MSG.MATCH_CONFIG, (msg) => {
     rivalStatus?.classList.add('revealing');
     if (rivalStatusText) rivalStatusText.textContent = 'Opponent: Revealed!';
     setTimeout(() => onRevealComplete?.(msg), 1500);
@@ -169,6 +218,14 @@ export function createOnlineSelection({ root, netClient, onRevealComplete, onPre
 
   selectedBey = ROSTER[0];
   render();
+  netClient.syncPicks?.();
 
-  return { getSelectedBey: () => selectedBey };
+  return {
+    getSelectedBey: () => selectedBey,
+    destroy() {
+      offPickStatus();
+      offLockRejected();
+      offMatchConfig();
+    },
+  };
 }

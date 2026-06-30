@@ -101,8 +101,9 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
       const modelHolder = new THREE.Group();
       modelHolder.add(model);
       orientSpinAxisToY(modelHolder);
-      // Leone / Libra / Bull: pole faces -Z in the baked mesh; map to +Y spin axis.
-      if (/leone|libra|bull/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
+      // Leone / Libra / Bull / Eagle / Lightning L-Drago: pole faces -Z in the baked mesh; map to +Y spin axis.
+      // Meteo L-Drago (Sketchfab) already aligns after orientSpinAxisToY — do not add PI/2 (see initial top.js).
+      if (/leone|libra|bull|eagle|lightning_ldrago/i.test(url)) modelHolder.rotation.x = Math.PI / 2;
       // Dark Bull wheel art is 90° off the baked UV frame — align before scaling.
       if (/bull/i.test(url)) model.rotation.z = Math.PI / 2;
 

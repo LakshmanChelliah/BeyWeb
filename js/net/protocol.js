@@ -1,6 +1,8 @@
 /** Shared WebSocket protocol for online multiplayer. */
 
-export const WINS_NEEDED = 2;
+export const WINS_NEEDED = 3;
+/** Max rounds in an online series (best-of-5 when first to 3). */
+export const SERIES_MAX_ROUNDS = WINS_NEEDED * 2 - 1;
 /** Static dev site (`npm run dev:static`). */
 export const DEV_STATIC_PORT = 3000;
 /** WebSocket dev server (`npm run dev:server`). */
@@ -15,6 +17,8 @@ export const MSG = Object.freeze({
   JOIN_ROOM: 'join_room',
   LOCK_BEY: 'lock_bey',
   UNLOCK_BEY: 'unlock_bey',
+  /** Request current pick phase state (used when opening the selection UI). */
+  SYNC_PICKS: 'sync_picks',
   NEXT_ROUND_READY: 'next_round_ready',
   /** @deprecated alias */
   READY: 'next_round_ready',
@@ -30,6 +34,7 @@ export const MSG = Object.freeze({
   PEER_JOINED: 'peer_joined',
   PEER_LEFT: 'peer_left',
   PICK_STATUS: 'pick_status',
+  LOCK_BEY_REJECTED: 'lock_bey_rejected',
   MATCH_CONFIG: 'match_config',
   COUNTDOWN: 'countdown',
   SNAPSHOT: 'snapshot',

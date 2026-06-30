@@ -8,6 +8,7 @@ import {
   settleSleepingTop,
   stepLaunchDrop,
   applyCenterPull,
+  applyOrbitDrift,
   resolveWallClipping,
 } from '../physics/top.js';
 
@@ -26,19 +27,31 @@ export function stepSimulation({
     if (!state.playerBody.userData.ringOut) {
       settleSleepingTop(state.playerBody, state.playerSpin);
     }
-    stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
+    stabilizeTop(
+      state.playerBody,
+      state.playerSpin,
+      state.playerBody.userData.spinSign ?? 1,
+      state.launchGrace
+    );
     pinTopToFloor(state.playerBody);
   }
   if (state.aiBody) {
     if (!state.aiBody.userData.ringOut) {
       settleSleepingTop(state.aiBody, state.aiSpin);
     }
-    stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
+    stabilizeTop(
+      state.aiBody,
+      state.aiSpin,
+      state.aiBody.userData.spinSign ?? -0.95,
+      state.launchGrace
+    );
     pinTopToFloor(state.aiBody);
   }
 
   if (!state.pendingKo) {
     input.applySteering?.(state);
+    applyOrbitDrift(state.playerBody, state.playerSpin);
+    applyOrbitDrift(state.aiBody, state.aiSpin);
     applyCenterPull(state.playerBody, state.playerSpin);
     applyCenterPull(state.aiBody, state.aiSpin);
   }
@@ -57,7 +70,12 @@ export function stepSimulation({
 
   if (state.playerBody) {
     clampLaunchSpeed(state.playerBody, state.launchGrace);
-    stabilizeTop(state.playerBody, state.playerSpin, 1, state.launchGrace);
+    stabilizeTop(
+      state.playerBody,
+      state.playerSpin,
+      state.playerBody.userData.spinSign ?? 1,
+      state.launchGrace
+    );
     pinTopToFloor(state.playerBody);
     if (!state.playerBody.userData.ringOut) {
       settleSleepingTop(state.playerBody, state.playerSpin);
@@ -65,7 +83,12 @@ export function stepSimulation({
   }
   if (state.aiBody) {
     clampLaunchSpeed(state.aiBody, state.launchGrace);
-    stabilizeTop(state.aiBody, state.aiSpin, -0.95, state.launchGrace);
+    stabilizeTop(
+      state.aiBody,
+      state.aiSpin,
+      state.aiBody.userData.spinSign ?? -0.95,
+      state.launchGrace
+    );
     pinTopToFloor(state.aiBody);
     if (!state.aiBody.userData.ringOut) {
       settleSleepingTop(state.aiBody, state.aiSpin);

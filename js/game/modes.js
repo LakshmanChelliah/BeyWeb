@@ -21,7 +21,7 @@ export function modeBlurb(mode) {
     case GAME_MODES.TOURNAMENT:
       return 'Tournament: best of 3 vs five rivals in rising order.';
     case GAME_MODES.ONLINE:
-      return 'Online: invite a friend, lock in your bey, best of 3 real-time battle.';
+      return 'Online: invite a friend, lock in your bey, best of 5 (first to 3) real-time battle.';
     default:
       return 'Two-player local battle. P1: WASD + Q/E. P2: arrow keys + comma/period. Launch the other bey out through a KO pocket to win!';
   }

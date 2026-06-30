@@ -518,7 +518,7 @@ body.vs-cpu #p2-abilities {
   left: 50%;
   transform: translateX(-50%);
   z-index: 11;
-  padding: 8px 16px;
+  padding: 8px 14px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -528,7 +528,7 @@ body.vs-cpu #p2-abilities {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(120, 160, 255, 0.22);
-  border-radius: 50px;
+  border-radius: 16px;
   pointer-events: none;
   white-space: nowrap;
 }
@@ -536,16 +536,37 @@ body.vs-cpu #p2-abilities {
   display: none;
 }
 
+.online-series-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.online-series-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  opacity: 0.88;
+}
+
+.online-series-score {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
 .online-score-lights {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 7px;
 }
 
 .score-light {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   border: 2px solid rgba(120, 160, 255, 0.35);
   background: rgba(255, 255, 255, 0.06);
@@ -793,7 +814,7 @@ body.vs-cpu #p2-abilities {
 }
 .bey-card.active .bey-emblem-img { animation: bey-spin 3.5s linear infinite reverse; }
 
-/* L-Drago: transparent logo on the standard spinning emblem disc */
+/* Meteo L-Drago emblem */
 .bey-emblem-img--ldrago {
   width: 86%;
   height: 86%;
@@ -804,6 +825,45 @@ body.vs-cpu #p2-abilities {
     saturate(1.1)
     drop-shadow(0 0 1px rgba(185, 28, 28, 0.45))
     drop-shadow(0 1px 3px rgba(127, 29, 29, 0.2));
+}
+
+/* Lightning L-Drago emblem */
+.bey-emblem-img--lightning_ldrago {
+  width: 98%;
+  height: 98%;
+  object-fit: contain;
+  object-position: 50% 50%;
+  filter:
+    contrast(1.15)
+    saturate(1.1)
+    drop-shadow(0 0 4px rgba(91, 33, 217, 0.55))
+    drop-shadow(0 1px 3px rgba(40, 15, 96, 0.35));
+}
+
+/* Earth Eagle emblem */
+.bey-emblem-img--eagle {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  object-position: 50% 50%;
+  filter:
+    contrast(1.08)
+    saturate(1.12)
+    drop-shadow(0 0 5px rgba(109, 40, 217, 0.45))
+    drop-shadow(0 2px 5px rgba(20, 12, 36, 0.55));
+}
+
+/* Ray Striker emblem */
+.bey-emblem-img--striker {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  object-position: 50% 50%;
+  filter:
+    contrast(1.1)
+    saturate(1.15)
+    drop-shadow(0 0 5px rgba(20, 184, 166, 0.5))
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
 }
 
 /* Dark Bull: transparent logo on the standard spinning emblem disc */
@@ -1140,6 +1200,16 @@ body.mobile .ability-bar-right { bottom: 80px; }
   line-height: 1.2;
   color: #c8d4f0;
 }
+.ability-subtitle {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.1;
+  color: #a78bfa;
+  opacity: 0.92;
+}
 .ability-key {
   font-size: 10px;
   font-weight: 700;
@@ -1454,6 +1524,9 @@ body.mobile .bey-emblem-img {
 }
 
 body.mobile .bey-emblem-img--ldrago,
+body.mobile .bey-emblem-img--lightning_ldrago,
+body.mobile .bey-emblem-img--eagle,
+body.mobile .bey-emblem-img--striker,
 body.mobile .bey-emblem-img--bull {
   width: 88%;
   height: 88%;
@@ -1679,6 +1752,11 @@ body.mobile .pick-bey {
   align-items: center;
   text-align: center;
   gap: 20px;
+}
+
+/* display:flex on panels overrides the native [hidden] rule — keep toggles working */
+.online-lobby [hidden] {
+  display: none !important;
 }
 
 .online-lobby-header {
@@ -2150,6 +2228,32 @@ body.mobile .pick-bey {
   box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
 }
 
+.online-your-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px auto 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(120, 160, 255, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #8a9bc0;
+}
+
+.online-your-status.rival-locked {
+  color: #c8f0d4;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.online-your-status.rival-locked .online-opponent-status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
 .online-opponent-status.revealing .online-opponent-status-dot {
   background: #4f8cff;
   box-shadow: 0 0 6px rgba(79, 140, 255, 0.6);
@@ -2214,11 +2318,34 @@ body.mobile .pick-bey {
 
 .online-carousel-scene .bey-item {
   width: 260px;
+  opacity: 1;
 }
 
 .online-carousel-scene .bey-card.online-pick-card {
   padding: 16px 14px 18px;
   gap: 6px;
+  background: #10182c;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.online-carousel-scene .bey-card.online-pick-card.active {
+  background: #141e36;
+  border-color: var(--bey-color);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.45),
+    0 0 36px -4px var(--bey-color);
+}
+
+.online-carousel-scene .bey-card.online-pick-card .bey-name {
+  color: #eef2ff;
+}
+
+.online-carousel-scene .bey-card.online-pick-card .bey-packaging-stats {
+  background: rgba(0, 0, 0, 0.42);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 .online-carousel-scene .bey-emblem {
