@@ -16,8 +16,17 @@ test.describe('Playable bey roster', () => {
     expect(await page.locator('.carousel-dot').count()).toBeGreaterThanOrEqual(8);
   });
 
+  test('module graph loads versioned beys.js', async ({ page }) => {
+    const beysUrls = [];
+    page.on('request', (req) => {
+      if (req.url().includes('/js/game/beys.js')) beysUrls.push(req.url());
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    expect(beysUrls.some((u) => /beys\.js\?v=\d+/.test(u))).toBeTruthy();
+  });
+
   test('beys.js is served with no-cache headers and full roster', async ({ request }) => {
-    const res = await request.get('/js/game/beys.js');
+    const res = await request.get('/js/game/beys.js?v=18');
     expect(res.ok()).toBeTruthy();
     const cacheControl = res.headers()['cache-control'] ?? '';
     expect(cacheControl).toMatch(/no-cache/i);

@@ -1,6 +1,6 @@
 import { createKeyboardInput } from './input/keyboard.js';
 import { applyAISteering, tickAIAbilities } from './input/ai.js';
-import { createAppBootstrap } from './app/bootstrap.js';
+import { createAppBootstrap } from './app/bootstrap.js?v=18';
 import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from './game/modes.js';
 import { createRemoteInput } from './net/remoteInput.js';
 import { steerFromKeys, PC_STEER_MAP } from './net/inputBuffer.js';

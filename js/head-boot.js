@@ -2,6 +2,20 @@
   var useCdn =
     (location.hostname === 'localhost' && location.port === '3000') ||
     location.hostname.endsWith('github.io');
+  var v = window.__BEYWEB_ASSET_V__ || '18';
+  var base = window.__BEYWEB_BASE__ || '';
+
+  function ver(relFromRoot) {
+    var path = relFromRoot.charAt(0) === '/' ? relFromRoot : '/' + relFromRoot;
+    return base + path + '?v=' + v;
+  }
+
+  function scopePrefix(relDir) {
+    var path = relDir.charAt(0) === '/' ? relDir : '/' + relDir;
+    if (!path.endsWith('/')) path += '/';
+    return base + path;
+  }
+
   var imports = useCdn
     ? {
         three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
@@ -13,9 +27,45 @@
         'three/addons/': '/vendor/three/examples/jsm/',
         'cannon-es': '/vendor/cannon-es.js',
       };
+
+  // Version relative ES module imports so CDN/browser caches cannot serve stale graphs.
+  var scopes = {};
+  scopes[scopePrefix('/js')] = {
+    './app/bootstrap.js': ver('/js/app/bootstrap.js'),
+    './input/keyboard.js': ver('/js/input/keyboard.js'),
+    './input/gyro.js': ver('/js/input/gyro.js'),
+    './input/ai.js': ver('/js/input/ai.js'),
+    './game/modes.js': ver('/js/game/modes.js'),
+    './net/remoteInput.js': ver('/js/net/remoteInput.js'),
+    './net/inputBuffer.js': ver('/js/net/inputBuffer.js'),
+  };
+  scopes[scopePrefix('/js/app')] = {
+    '../game/engine.js': ver('/js/game/engine.js'),
+    '../input/ai.js': ver('/js/input/ai.js'),
+    '../ui/selection.js': ver('/js/ui/selection.js'),
+    '../ui/playSetup.js': ver('/js/ui/playSetup.js'),
+    '../ui/domRefs.js': ver('/js/ui/domRefs.js'),
+    '../game/campaignController.js': ver('/js/game/campaignController.js'),
+    '../game/onlineController.js': ver('/js/game/onlineController.js'),
+    '../ui/onlineLobby.js': ver('/js/ui/onlineLobby.js'),
+    '../ui/onlineSelection.js': ver('/js/ui/onlineSelection.js'),
+    '../net/client.js': ver('/js/net/client.js'),
+    '../net/inputBuffer.js': ver('/js/net/inputBuffer.js'),
+    '../net/debug.js': ver('/js/net/debug.js'),
+    '../net/protocol.js': ver('/js/net/protocol.js'),
+    '../game/modes.js': ver('/js/game/modes.js'),
+  };
+  scopes[scopePrefix('/js/ui')] = {
+    '../game/beys.js': ver('/js/game/beys.js'),
+    '../game/abilities.js': ver('/js/game/abilities.js'),
+    '../app/basePath.js': ver('/js/app/basePath.js'),
+    './beyPackagingStars.js': ver('/js/ui/beyPackagingStars.js'),
+    '../net/protocol.js': ver('/js/net/protocol.js'),
+  };
+
   var el = document.createElement('script');
   el.type = 'importmap';
-  el.textContent = JSON.stringify({ imports: imports });
+  el.textContent = JSON.stringify({ imports: imports, scopes: scopes });
   document.head.appendChild(el);
 
   if (document.body && document.body.classList.contains('mobile')) {
