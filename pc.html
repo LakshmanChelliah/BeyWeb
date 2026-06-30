@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spin Sumo | PC Edition</title>
+  <base href="/" id="beyweb-base" />
   <script>
     (function () {
       var p = location.pathname;
@@ -11,18 +12,17 @@
       else if (/\/[^/]+\.html$/i.test(p)) p = p.replace(/\/[^/]+\.html$/i, '');
       if (!p.endsWith('/')) p += '/';
       window.__BEYWEB_BASE__ = p === '/' ? '' : p.replace(/\/$/, '');
-      window.__BEYWEB_ASSET_V__ = '19';
+      window.__BEYWEB_ASSET_V__ = '20';
       if (location.hostname.endsWith('github.io')) {
         window.__BEYWEB_WS__ = 'wss://beyweb-production.up.railway.app';
       }
-      var base = document.createElement('base');
-      base.href = p;
-      document.head.appendChild(base);
+      var baseEl = document.getElementById('beyweb-base');
+      if (baseEl) baseEl.href = p;
     })();
   </script>
-  <script src="js/net/entryRoute.js?v=19"></script>
-  <script src="js/head-boot.js?v=19"></script>
-  <link rel="stylesheet" href="css/game.css?v=19" />
+  <script src="js/net/entryRoute.js?v=20"></script>
+  <script src="js/head-boot.js?v=20"></script>
+  <link rel="stylesheet" href="css/game.css?v=20" />
 </head>
 <body>
 
@@ -87,6 +87,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/main-pc.js?v=19"></script>
+  <script type="module" src="js/main-pc.js?v=20"></script>
 </body>
 </html>
