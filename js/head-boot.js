@@ -2,7 +2,7 @@
   var useCdn =
     (location.hostname === 'localhost' && location.port === '3000') ||
     location.hostname.endsWith('github.io');
-  var v = window.__BEYWEB_ASSET_V__ || '24';
+  var v = window.__BEYWEB_ASSET_V__ || '25';
   var base = window.__BEYWEB_BASE__ || '';
 
   function ver(relFromRoot) {

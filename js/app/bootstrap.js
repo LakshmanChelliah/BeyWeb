@@ -1,17 +1,17 @@
-import { createGame } from '../game/engine.js?v=24';
-import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=24';
-import { createBeySelection } from '../ui/selection.js?v=24';
-import { createPlaySetup } from '../ui/playSetup.js?v=24';
-import { queryGameUi } from '../ui/domRefs.js?v=24';
-import { createCampaignController } from '../game/campaignController.js?v=24';
-import { createOnlineController } from '../game/onlineController.js?v=24';
-import { createOnlineLobby } from '../ui/onlineLobby.js?v=24';
-import { createOnlineSelection } from '../ui/onlineSelection.js?v=24';
-import { createNetClient } from '../net/client.js?v=24';
-import { createInputBuffer } from '../net/inputBuffer.js?v=24';
-import { createNetDebug } from '../net/debug.js?v=24';
-import { parseRoomFromUrl } from '../net/protocol.js?v=24';
-import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=24';
+import { createGame } from '../game/engine.js?v=25';
+import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=25';
+import { createBeySelection } from '../ui/selection.js?v=25';
+import { createPlaySetup } from '../ui/playSetup.js?v=25';
+import { queryGameUi } from '../ui/domRefs.js?v=25';
+import { createCampaignController } from '../game/campaignController.js?v=25';
+import { createOnlineController } from '../game/onlineController.js?v=25';
+import { createOnlineLobby } from '../ui/onlineLobby.js?v=25';
+import { createOnlineSelection } from '../ui/onlineSelection.js?v=25';
+import { createNetClient } from '../net/client.js?v=25';
+import { createInputBuffer } from '../net/inputBuffer.js?v=25';
+import { createNetDebug } from '../net/debug.js?v=25';
+import { parseRoomFromUrl } from '../net/protocol.js?v=25';
+import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=25';
 
 /**
  * Shared mobile/PC bootstrap: campaign, play setup, bey selection, and game wiring.

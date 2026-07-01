@@ -1,4 +1,4 @@
-import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=24';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=25';
 import { getBeyOrDefault } from './beys.js';
 
 function winnerToSlot(winner) {
@@ -304,10 +304,11 @@ export function createOnlineController({
   }
 
   function recoverArenaFromSnapshot(gameRef, msg) {
-    if (awaitingBothReady || !hasMatchBeys(gameRef)) return false;
+    if (!hasMatchBeys(gameRef)) return false;
     if (isLiveArena(gameRef)) return false;
     if (!msg.tick || msg.tick <= 0 || !msg.player || !msg.ai) return false;
     if (gameRef.state.playerBody && gameRef.state.aiBody) return false;
+    if (awaitingBothReady && !isCountdownAuthorized()) return false;
     return tryStartNextRound(gameRef);
   }
 
@@ -325,25 +326,30 @@ export function createOnlineController({
     });
 
     netClient.on(MSG.COUNTDOWN, (msg) => {
+      if (msg.seconds <= 0) {
+        if (isLiveArena(gameRef) && roundStartCommitted) return;
+
+        if (!canShowCountdown()) {
+          pendingCountdownGo = true;
+          return;
+        }
+
+        if (!hasMatchBeys(gameRef)) {
+          pendingCountdownGo = true;
+          showCountdown(msg.seconds);
+          return;
+        }
+
+        beginRoundFromCountdown(gameRef);
+        return;
+      }
+
       if (!canShowCountdown()) return;
 
-      if (msg.seconds > 0) {
-        // Ignore stale/resync countdown ticks once the round is live — they wipe spawned beys.
-        if (isLiveArena(gameRef)) return;
-        prepareCountdownArena(gameRef);
-        showCountdown(msg.seconds);
-        return;
-      }
-
-      if (isLiveArena(gameRef) && roundStartCommitted) return;
-
-      if (!hasMatchBeys(gameRef)) {
-        pendingCountdownGo = true;
-        showCountdown(msg.seconds);
-        return;
-      }
-
-      beginRoundFromCountdown(gameRef);
+      // Ignore stale/resync countdown ticks once the round is live — they wipe spawned beys.
+      if (isLiveArena(gameRef)) return;
+      prepareCountdownArena(gameRef);
+      showCountdown(msg.seconds);
     });
 
     netClient.on(MSG.SNAPSHOT, (msg) => {
@@ -386,7 +392,10 @@ export function createOnlineController({
         || (msg.slots?.[0] === true && msg.slots?.[1] === true);
       countdownAuthorized = bothReady;
       paintReadyButton();
-      if (bothReady && awaitingBothReady && restartAction === 'rematch') {
+      if (bothReady && pendingCountdownGo) {
+        pendingCountdownGo = false;
+        beginRoundFromCountdown(gameRef);
+      } else if (bothReady && awaitingBothReady && restartAction === 'rematch') {
         tryBeginRematchPicking();
       }
     });

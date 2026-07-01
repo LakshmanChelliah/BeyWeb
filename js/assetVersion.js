@@ -1,2 +1,2 @@
 /** Bump when shipping client-visible changes (cache-bust ES modules + static assets). */
-export const ASSET_V = '24';
+export const ASSET_V = '25';
