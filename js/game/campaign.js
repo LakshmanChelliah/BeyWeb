@@ -8,6 +8,7 @@ export const CAMPAIGN_OPPONENT_IDS = Object.freeze([
   'leone',   // Rock Leone
   'striker', // Ray Striker
   'pegasus', // Storm Pegasus
+  'lightning_ldrago', // Lightning L-Drago
   'ldrago',  // Meteo L-Drago
 ]);
 
