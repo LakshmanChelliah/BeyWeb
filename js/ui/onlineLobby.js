@@ -1,4 +1,4 @@
-import { joinUrl, MSG } from '../net/protocol.js?v=23';
+import { joinUrl, MSG, rememberHostRoom, getRememberedHostRoom } from '../net/protocol.js?v=26';
 
 function normalizeRoomCode(raw) {
   return String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -225,6 +225,7 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     const url = joinUrl(msg.roomId);
     linkInput.value = url;
     roomCodeEl.textContent = msg.roomId;
+    rememberHostRoom(msg.roomId);
     setPanelVisible(hostPanel, true);
     setStatus('Room created — share the code or link');
     showRoomPanel({ isHost: true });
@@ -243,12 +244,28 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     setStatus('Joining room…');
     try {
       await netClient.joinRoom(code);
-      showRoomPanel({ isHost: false });
       setStatus('Joined room');
       onRoomJoined?.(code);
     } catch (err) {
+      const notFound = /not found/i.test(err?.message || '');
+      if (notFound && getRememberedHostRoom() === code) {
+        try {
+          setStatus('Reconnecting to your room…');
+          const created = await netClient.createRoom({ reclaimRoomId: code });
+          showHostPanel(created);
+          return;
+        } catch (reclaimErr) {
+          showEntryPanel();
+          setStatus(reclaimErr?.message || 'Could not reclaim room — create a new one');
+          return;
+        }
+      }
       showEntryPanel();
-      setStatus(err?.message || 'Could not join room');
+      setStatus(
+        notFound
+          ? 'Room not found — ask the host to stay on the lobby screen, or create a new room'
+          : (err?.message || 'Could not join room')
+      );
     } finally {
       joinBtn.disabled = joinCodeInput.value.length < 6;
       createBtn.disabled = false;
@@ -279,9 +296,14 @@ export function createOnlineLobby({ root, netClient, onReady, onRoomJoined }) {
     updatePeers(msg.peerCount, { isGuest: hostPanel.hidden });
   }));
 
-  unsubs.push(netClient.on(MSG.JOINED, () => {
+  unsubs.push(netClient.on(MSG.JOINED, (msg) => {
+    const isHost = msg.slot === 0 && getRememberedHostRoom() === msg.roomId;
     setStatus('Joined room');
-    showRoomPanel({ isHost: false });
+    if (isHost) {
+      showHostPanel({ roomId: msg.roomId, slot: 0 });
+    } else {
+      showRoomPanel({ isHost: false });
+    }
     waitEl.textContent = 'Waiting for opponent to join…';
     peerYou?.classList.add('connected');
     hideReadyPopup();

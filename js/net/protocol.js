@@ -115,12 +115,38 @@ export function joinUrl(roomId, base) {
 
 const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+/** How long an empty room stays joinable after the last player leaves. */
+export const ROOM_EMPTY_TTL_MS = 10 * 60 * 1000;
+
+const ROOM_ID_RE = /^[A-Z0-9]{6}$/;
+
+export function isValidRoomId(id) {
+  return ROOM_ID_RE.test(String(id || '').toUpperCase());
+}
+
 export function generateRoomId() {
   let id = '';
   for (let i = 0; i < 6; i++) {
     id += ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)];
   }
   return id;
+}
+
+const HOST_ROOM_KEY = 'beyweb_host_room';
+
+export function rememberHostRoom(roomId) {
+  if (typeof sessionStorage === 'undefined' || !roomId) return;
+  sessionStorage.setItem(HOST_ROOM_KEY, String(roomId).toUpperCase());
+}
+
+export function clearHostRoom() {
+  if (typeof sessionStorage === 'undefined') return;
+  sessionStorage.removeItem(HOST_ROOM_KEY);
+}
+
+export function getRememberedHostRoom() {
+  if (typeof sessionStorage === 'undefined') return null;
+  return sessionStorage.getItem(HOST_ROOM_KEY);
 }
 
 export function parseRoomFromUrl() {
