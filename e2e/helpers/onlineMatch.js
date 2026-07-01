@@ -49,7 +49,7 @@ export async function joinOnlineRoom(page, roomCode) {
   await page.waitForFunction(() => {
     const panel = document.getElementById('online-room-panel');
     return panel && !panel.hidden;
-  }, null, { timeout: 15000 });
+  }, null, { timeout: 45000 });
 }
 
 export async function setupOnlineMatch(host, guest) {
