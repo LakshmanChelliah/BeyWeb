@@ -23,6 +23,7 @@
     "test:forfeit-lobby": "node scripts/test-forfeit-lobby-wait.mjs",
     "test:interp-smoothness": "node scripts/test-interp-smoothness.mjs",
     "test:static-cache": "node scripts/test-static-cache.mjs",
+    "test:friend-match": "node scripts/test-friend-match.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:ci": "npm test && playwright test",
@@ -31,7 +32,7 @@
     "dev:server": "node server/index.js",
     "dev:static": "npx serve . -p 3000",
     "dev:online": "npx concurrently \"npm run dev:server\" \"npm run dev:static\"",
-    "test": "npm run test:snapshot && npm run test:server-tick && npm run test:ws-smoke && npm run test:ready-gate && npm run test:next-round && npm run test:forfeit-lobby && npm run test:interp-smoothness && npm run test:static-cache"
+    "test": "npm run test:snapshot && npm run test:server-tick && npm run test:ws-smoke && npm run test:ready-gate && npm run test:next-round && npm run test:forfeit-lobby && npm run test:interp-smoothness && npm run test:static-cache && npm run test:friend-match"
   },
   "keywords": [],
   "author": "",

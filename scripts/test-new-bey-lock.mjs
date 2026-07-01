@@ -68,6 +68,10 @@ async function main() {
       console.error(`FAIL ${id}: wrong bey in match config`, cfg.beyIds);
       process.exit(1);
     }
+    if (cfg.beys?.[0]?.id !== id || !cfg.beys?.[1]?.model) {
+      console.error(`FAIL ${id}: missing server bey payload`, cfg.beys);
+      process.exit(1);
+    }
     console.log(`${id} lock OK`);
   }
 

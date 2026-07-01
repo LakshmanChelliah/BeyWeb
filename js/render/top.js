@@ -51,8 +51,21 @@ export function createFallbackTopMesh(color) {
   return group;
 }
 
+/** Bumps per-group load tokens so in-flight GLTF callbacks cannot remount after arena clear. */
+export function invalidateTopModelLoads(...groups) {
+  for (const group of groups) {
+    if (!group) continue;
+    group.userData._topLoadGen = (group.userData._topLoadGen ?? 0) + 1;
+  }
+}
+
 export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onReady) {
+  parentGroup.userData._topLoadGen = (parentGroup.userData._topLoadGen ?? 0) + 1;
+  const loadGen = parentGroup.userData._topLoadGen;
+  const stillCurrent = () => loadGen === parentGroup.userData._topLoadGen;
+
   function mountModel(modelHolder) {
+    if (!stillCurrent()) return;
     parentGroup.clear();
     parentGroup.add(modelHolder);
     if (physicsBody) {
@@ -62,6 +75,7 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
   }
 
   function mountFallback() {
+    if (!stillCurrent()) return;
     const fallback = createFallbackTopMesh(fallbackColor);
     centerModelOnAxis(fallback);
     mountModel(fallback);
@@ -75,6 +89,7 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
   gltfLoader.load(
     assetUrl(url),
     (gltf) => {
+      if (!stillCurrent()) return;
       const model = gltf.scene;
       model.traverse((child) => {
         if (child.isMesh) {
@@ -117,6 +132,7 @@ export function loadTopModel(url, fallbackColor, parentGroup, physicsBody, onRea
     },
     undefined,
     () => {
+      if (!stillCurrent()) return;
       mountFallback();
     }
   );

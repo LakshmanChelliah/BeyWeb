@@ -1,5 +1,6 @@
 import { CONFIG } from '../js/config.js';
 import { getBeyById, isBeyPlayable } from '../js/game/beys.js';
+import { serializeBeyForClient } from '../js/game/matchBeys.js';
 import {
   createMatchEnvironment,
   serverTick,
@@ -191,6 +192,10 @@ export class Room {
     this.broadcastAll({
       type: MSG.MATCH_CONFIG,
       beyIds: [this.locks[0].beyId, this.locks[1].beyId],
+      beys: [
+        serializeBeyForClient(getBeyById(this.locks[0].beyId)),
+        serializeBeyForClient(getBeyById(this.locks[1].beyId)),
+      ],
       scores: [...this.scores],
       round: this.round,
       winsNeeded: WINS_NEEDED,

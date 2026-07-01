@@ -24,8 +24,9 @@ import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera, resetMobileCameraFraming, snapArenaCamera } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
-import { createTopGroups, loadTopModel, setTopEmissive } from '../render/top.js';
-import { beyColorHex, getBeyOrDefault } from './beys.js?v=21';
+import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js';
+import { applyMatchBeys } from './matchBeys.js?v=23';
+import { beyColorHex, getBeyOrDefault } from './beys.js?v=23';
 import {
   createAbilityRuntime,
   triggerAbility as triggerAbilityCore,
@@ -46,7 +47,7 @@ import {
   isLibraBusterChannelingBody,
   SPECIAL_LOGO_FLASH_DUR,
   ABILITY_REGISTRY,
-} from './abilities.js?v=21';
+} from './abilities.js?v=23';
 import { stepSimulation } from './simulation.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
@@ -355,6 +356,9 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       state.aiBody = null;
     }
     state.abilities = null;
+    invalidateTopModelLoads(playerGroup, aiGroup);
+    playerGroup.clear();
+    aiGroup.clear();
     for (const container of Object.values(dom.abilityBars)) {
       container?.classList.remove('visible');
       if (container) container.innerHTML = '';
@@ -395,6 +399,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       state.aiBody = null;
     }
     state.abilities = null;
+    invalidateTopModelLoads(playerGroup, aiGroup);
     playerGroup.clear();
     aiGroup.clear();
     for (const container of Object.values(dom.abilityBars)) {
@@ -713,6 +718,68 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     input.onMatchEnd?.(result);
   }
 
+  function stampBeyOnBody(body, bey, side) {
+    body.userData.beyStats = {
+      id: bey.id,
+      atk: bey.atk ?? 50,
+      move: bey.move ?? bey.atk ?? 50,
+      def: bey.def ?? 50,
+      sta: bey.sta ?? 50,
+      orbitDrift: bey.orbitDrift,
+    };
+    body.userData.beyColor = beyColorHex(bey.color);
+    body.userData.spinSign = bey.leftSpin
+      ? (side === 'ai' ? -0.95 : -1)
+      : (side === 'ai' ? 0.95 : 1);
+  }
+
+  function bindBeyPresentation(playerBey, aiBey) {
+    if (state.playerBody) stampBeyOnBody(state.playerBody, playerBey, 'player');
+    if (state.aiBody) stampBeyOnBody(state.aiBody, aiBey, 'ai');
+    state.abilities = {
+      player: createAbilityRuntime(playerBey),
+      ai: createAbilityRuntime(aiBey),
+    };
+    buildAbilityButtons('player');
+    buildAbilityButtons('ai');
+    updateHud();
+    updateAvatars();
+    if (state.playerBody) {
+      loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
+    }
+    if (state.aiBody) {
+      loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
+    }
+    ensureTopVisuals();
+  }
+
+  function applyOnlineMatchConfig(msg) {
+    const hadBodies = Boolean(state.playerBody && state.aiBody);
+    applyMatchBeys(state, msg);
+    if (!hadBodies) return;
+    bindBeyPresentation(state.playerBey, state.aiBey);
+  }
+
+  function ensureTopVisuals() {
+    if (!state.playerBody || !state.aiBody) return;
+    if (playerGroup.children.length === 0 && state.playerBey) {
+      loadTopModel(
+        state.playerBey.model,
+        beyColorHex(state.playerBey.color),
+        playerGroup,
+        state.playerBody
+      );
+    }
+    if (aiGroup.children.length === 0 && state.aiBey) {
+      loadTopModel(
+        state.aiBey.model,
+        beyColorHex(state.aiBey.color),
+        aiGroup,
+        state.aiBody
+      );
+    }
+  }
+
   function spawnTops() {
     resetStarBlastCamera();
     resetMobileCameraFraming();
@@ -744,28 +811,17 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
       2
     );
 
-    const playerBey = getBeyOrDefault(state.playerBey?.id, 'pegasus');
-    const aiBey = getBeyOrDefault(state.aiBey?.id, 'ldrago');
+    const playerBey = state.playerBey?.id
+      ? state.playerBey
+      : getBeyOrDefault(state.matchBeyIds?.[0] ?? state.playerBey?.id, 'pegasus');
+    const aiBey = state.aiBey?.id
+      ? state.aiBey
+      : getBeyOrDefault(state.matchBeyIds?.[1] ?? state.aiBey?.id, 'ldrago');
     state.playerBey = playerBey;
     state.aiBey = aiBey;
 
-    const stampBody = (body, bey, side) => {
-      body.userData.beyStats = {
-        id: bey.id,
-        atk: bey.atk ?? 50,
-        move: bey.move ?? bey.atk ?? 50,
-        def: bey.def ?? 50,
-        sta: bey.sta ?? 50,
-        orbitDrift: bey.orbitDrift,
-      };
-      body.userData.beyColor = beyColorHex(bey.color);
-      body.userData.spinSign = bey.leftSpin
-        ? (side === 'ai' ? -0.95 : -1)
-        : (side === 'ai' ? 0.95 : 1);
-    };
-
-    stampBody(state.playerBody, playerBey, 'player');
-    stampBody(state.aiBody, aiBey, 'ai');
+    stampBeyOnBody(state.playerBody, playerBey, 'player');
+    stampBeyOnBody(state.aiBody, aiBey, 'ai');
 
     // Tag sides and build ability runtimes aligned to sim bodies.
     state.playerBody.userData.side = 'player';
@@ -794,6 +850,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     // Always bind visuals to sim groups/bodies (player=slot0, ai=slot1).
     loadTopModel(playerBey.model, beyColorHex(playerBey.color), playerGroup, state.playerBody);
     loadTopModel(aiBey.model, beyColorHex(aiBey.color), aiGroup, state.aiBody);
+    ensureTopVisuals();
     snapArenaCamera(camera, state, mode);
   }
 
@@ -957,6 +1014,8 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
 
     updateAbilityVisuals();
 
+    ensureTopVisuals();
+
     if (state.playerBody) {
       state.playerVisualYaw = syncTopVisual(
         playerGroup,
@@ -1022,6 +1081,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     spawnTops,
     triggerAbility,
     applyNetSnapshot,
+    applyOnlineMatchConfig,
     startOnlineRound,
     endOnlineRound,
     clearArenaTops,

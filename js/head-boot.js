@@ -2,7 +2,7 @@
   var useCdn =
     (location.hostname === 'localhost' && location.port === '3000') ||
     location.hostname.endsWith('github.io');
-  var v = window.__BEYWEB_ASSET_V__ || '21';
+  var v = window.__BEYWEB_ASSET_V__ || '23';
   var base = window.__BEYWEB_BASE__ || '';
 
   function ver(relFromRoot) {
@@ -68,6 +68,7 @@
   scopes[scopePrefix('/js/game')] = {
     './abilities.js': ver('/js/game/abilities.js'),
     './abilities/index.js': ver('/js/game/abilities/index.js'),
+    './matchBeys.js': ver('/js/game/matchBeys.js'),
     './beys.js': ver('/js/game/beys.js'),
     './state.js': ver('/js/game/state.js'),
     './rules.js': ver('/js/game/rules.js'),

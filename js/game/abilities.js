@@ -1,2 +1,2 @@
 /** Barrel re-export — implementation lives in ./abilities/ */
-export * from './abilities/index.js?v=21';
+export * from './abilities/index.js?v=23';

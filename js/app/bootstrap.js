@@ -1,17 +1,17 @@
-import { createGame } from '../game/engine.js?v=21';
-import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=21';
-import { createBeySelection } from '../ui/selection.js?v=21';
-import { createPlaySetup } from '../ui/playSetup.js?v=21';
-import { queryGameUi } from '../ui/domRefs.js?v=21';
-import { createCampaignController } from '../game/campaignController.js?v=21';
-import { createOnlineController } from '../game/onlineController.js?v=21';
-import { createOnlineLobby } from '../ui/onlineLobby.js?v=21';
-import { createOnlineSelection } from '../ui/onlineSelection.js?v=21';
-import { createNetClient } from '../net/client.js?v=21';
-import { createInputBuffer } from '../net/inputBuffer.js?v=21';
-import { createNetDebug } from '../net/debug.js?v=21';
-import { parseRoomFromUrl } from '../net/protocol.js?v=21';
-import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=21';
+import { createGame } from '../game/engine.js?v=23';
+import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=23';
+import { createBeySelection } from '../ui/selection.js?v=23';
+import { createPlaySetup } from '../ui/playSetup.js?v=23';
+import { queryGameUi } from '../ui/domRefs.js?v=23';
+import { createCampaignController } from '../game/campaignController.js?v=23';
+import { createOnlineController } from '../game/onlineController.js?v=23';
+import { createOnlineLobby } from '../ui/onlineLobby.js?v=23';
+import { createOnlineSelection } from '../ui/onlineSelection.js?v=23';
+import { createNetClient } from '../net/client.js?v=23';
+import { createInputBuffer } from '../net/inputBuffer.js?v=23';
+import { createNetDebug } from '../net/debug.js?v=23';
+import { parseRoomFromUrl } from '../net/protocol.js?v=23';
+import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=23';
 
 /**
  * Shared mobile/PC bootstrap: campaign, play setup, bey selection, and game wiring.
@@ -159,7 +159,7 @@ export function createAppBootstrap({
           netClient,
           onPrepareMotion: () => input?.prepareOnline?.(),
           onRevealComplete() {
-            onlineCtrl.start(netClient.slot);
+            if (!onlineCtrl.isActive()) onlineCtrl.start(netClient.slot);
             onlineCtrl.updateHud();
             beysChosen = true;
             input.prepareOnline?.();
@@ -182,7 +182,7 @@ export function createAppBootstrap({
       netClient,
       onPrepareMotion: () => input?.prepareOnline?.(),
       onRevealComplete() {
-        onlineCtrl.start(netClient.slot);
+        if (!onlineCtrl.isActive()) onlineCtrl.start(netClient.slot);
         onlineCtrl.updateHud();
         beysChosen = true;
         input.prepareOnline?.();
@@ -373,6 +373,10 @@ export function createAppBootstrap({
           restartLabel: btn?.textContent ?? '',
           restartDisabled: btn?.disabled ?? false,
           hasArenaBodies: !!(gameRef?.state.playerBody && gameRef?.state.aiBody),
+          hasTopVisuals: !!(
+            gameRef?.playerGroup?.children?.length &&
+            gameRef?.aiGroup?.children?.length
+          ),
           onlineActive: onlineCtrl.isActive(),
           onlineMotion: gameRef?.getOnlineMotionStats?.() ?? null,
           lastServerTick: Math.max(
