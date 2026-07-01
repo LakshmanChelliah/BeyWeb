@@ -52,7 +52,64 @@ export async function joinOnlineRoom(page, roomCode) {
   }, null, { timeout: 15000 });
 }
 
-export async function setupOnlineMatch(host, guest) {
+/** Carousel index order matches PLAYABLE_BEYS (isBeyPlayable) in beys.js. */
+const ONLINE_BEY_ORDER = [
+  'pegasus',
+  'ldrago',
+  'lightning_ldrago',
+  'leone',
+  'libra',
+  'eagle',
+  'striker',
+  'bull',
+];
+
+export async function pickOnlineBey(page, beyId) {
+  const index = ONLINE_BEY_ORDER.indexOf(beyId);
+  if (index < 0) throw new Error(`Unknown online bey id: ${beyId}`);
+  await page.waitForSelector('.online-select');
+  const right = page.locator('.online-carousel-scene .carousel-arrow.right');
+  for (let i = 0; i < index; i += 1) {
+    await right.click();
+    await page.waitForTimeout(120);
+  }
+}
+
+export async function inspectOnlineMatch(page) {
+  return page.evaluate(() => {
+    const e2e = window.__BEYWEB_E2E__;
+    const gr = e2e.gameRef;
+    const slot = e2e.netClient.slot ?? 0;
+    const localYou = slot === 1 ? gr.state.aiBey : gr.state.playerBey;
+    const localOpp = slot === 1 ? gr.state.playerBey : gr.state.aiBey;
+    const youAvatar = document.getElementById('player-avatar');
+    const oppAvatar = document.getElementById('ai-avatar');
+    return {
+      slot,
+      youId: localYou?.id,
+      oppId: localOpp?.id,
+      slot0Id: gr.state.playerBey?.id,
+      slot1Id: gr.state.aiBey?.id,
+      matchBeyIds: gr.state.matchBeyIds,
+      youAvatarSrc: youAvatar?.getAttribute('src') ?? '',
+      oppAvatarSrc: oppAvatar?.getAttribute('src') ?? '',
+      abilities: [
+        ...document.querySelectorAll(
+          '#player-abilities .ability-name, #p1-abilities .ability-name'
+        ),
+      ].map((el) => el.textContent),
+      hasBodies: !!(gr.state.playerBody && gr.state.aiBody),
+      hasTopVisuals: !!(gr.playerGroup?.children?.length && gr.aiGroup?.children?.length),
+      topMeshCount: (gr.playerGroup?.children?.length ?? 0) + (gr.aiGroup?.children?.length ?? 0),
+      gameRunning: gr.state.gameRunning,
+      hudVisible: document.getElementById('hud')?.classList.contains('visible'),
+      spinYou: Math.round((slot === 1 ? gr.state.aiSpin : gr.state.playerSpin) * 100),
+      assetVersion: window.__BEYWEB_ASSET_V__,
+    };
+  });
+}
+
+export async function setupOnlineMatchWithBeys(host, guest, hostBey = 'lightning_ldrago', guestBey = 'pegasus') {
   await selectOnlineMode(host);
   await waitForE2E(host);
 
@@ -70,12 +127,77 @@ export async function setupOnlineMatch(host, guest) {
 
   await host.waitForSelector('#btn-lock');
   await guest.waitForSelector('#btn-lock');
+
+  await pickOnlineBey(host, hostBey);
+  await pickOnlineBey(guest, guestBey);
+
   await host.click('#btn-lock');
   await guest.click('#btn-lock');
 
   await waitForOnlineMatch(host);
   await waitForOnlineMatch(guest);
-  await host.waitForTimeout(2000);
+
+  await host.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.hasArenaBodies && s.hasTopVisuals && s.gameRunning;
+  }, null, { timeout: 45000 });
+  await guest.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.hasArenaBodies && s.hasTopVisuals && s.gameRunning;
+  }, null, { timeout: 45000 });
+
+  await host.waitForTimeout(2500);
+}
+
+export async function setupOnlineMatch(host, guest) {
+  return setupOnlineMatchWithBeys(host, guest, 'pegasus', 'ldrago');
+}
+
+export async function selectOnlineModeMobile(page) {
+  await page.goto('/?e2e=1');
+  await page.waitForSelector('#select-overlay');
+  await page.getByRole('button', { name: 'Online' }).click();
+  await page.waitForSelector('#online-flow:not(.hidden)');
+}
+
+export async function setupMobileOnlineMatchWithBeys(host, guest, hostBey = 'lightning_ldrago', guestBey = 'pegasus') {
+  await selectOnlineModeMobile(host);
+  await waitForE2E(host);
+
+  const joinUrl = await createOnlineRoom(host);
+  const roomCode = new URL(joinUrl).searchParams.get('room');
+
+  await selectOnlineModeMobile(guest);
+  await waitForE2E(guest);
+  await joinOnlineRoom(guest, roomCode);
+
+  await host.waitForSelector('#online-continue:not([disabled])');
+  await guest.waitForSelector('#online-continue:not([disabled])');
+  await host.click('#online-continue');
+  await guest.click('#online-continue');
+
+  await host.waitForSelector('#btn-lock');
+  await guest.waitForSelector('#btn-lock');
+
+  await pickOnlineBey(host, hostBey);
+  await pickOnlineBey(guest, guestBey);
+
+  await host.click('#btn-lock');
+  await guest.click('#btn-lock');
+
+  await waitForOnlineMatch(host);
+  await waitForOnlineMatch(guest);
+
+  await host.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.hasArenaBodies && s.hasTopVisuals && s.gameRunning;
+  }, null, { timeout: 45000 });
+  await guest.waitForFunction(() => {
+    const s = window.__BEYWEB_E2E__.getState();
+    return s.hasArenaBodies && s.hasTopVisuals && s.gameRunning;
+  }, null, { timeout: 45000 });
+
+  await host.waitForTimeout(2500);
 }
 
 export async function forceRoundEnd(host, guest) {
