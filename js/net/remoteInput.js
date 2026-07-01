@@ -2,7 +2,7 @@ import { CONFIG } from '../config.js';
 import { applySteerForce } from '../physics/steer.js';
 import { applyCenterPull, applyOrbitDrift } from '../physics/top.js';
 import { normalizeSteer } from './inputBuffer.js';
-import { TICK_RATE } from './protocol.js?v=21';
+import { TICK_RATE } from './protocol.js?v=22';
 
 const SEND_INTERVAL_MS = 1000 / TICK_RATE;
 const STEER_OPTS = { minSpin: CONFIG.SLEEP_THRESHOLD, skipKinematic: true, normalize: false };

@@ -113,7 +113,7 @@ export function applySnapshot(state, snap, localSlot = 0) {
   state.launchGrace = snap.launchGrace;
   state.gameFrozen = snap.gameFrozen ?? false;
   // Ignore stale KO metadata while launch grace is active on a fresh round.
-  if (snap.launchGrace > 0) {
+  if ((snap.launchGrace ?? 0) > 0 || (state.launchGrace ?? 0) > 0) {
     state.pendingKo = null;
   } else {
     state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;
@@ -141,7 +141,7 @@ export function applySnapshotMeta(state, snap) {
   state.launchGrace = snap.launchGrace;
   state.gameFrozen = snap.gameFrozen ?? false;
   // Ignore stale KO metadata while launch grace is active on a fresh round.
-  if (snap.launchGrace > 0) {
+  if ((snap.launchGrace ?? 0) > 0 || (state.launchGrace ?? 0) > 0) {
     state.pendingKo = null;
   } else {
     state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;

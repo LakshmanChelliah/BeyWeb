@@ -1,17 +1,17 @@
-import { createGame } from '../game/engine.js?v=21';
-import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=21';
-import { createBeySelection } from '../ui/selection.js?v=21';
-import { createPlaySetup } from '../ui/playSetup.js?v=21';
-import { queryGameUi } from '../ui/domRefs.js?v=21';
-import { createCampaignController } from '../game/campaignController.js?v=21';
-import { createOnlineController } from '../game/onlineController.js?v=21';
-import { createOnlineLobby } from '../ui/onlineLobby.js?v=21';
-import { createOnlineSelection } from '../ui/onlineSelection.js?v=21';
-import { createNetClient } from '../net/client.js?v=21';
-import { createInputBuffer } from '../net/inputBuffer.js?v=21';
-import { createNetDebug } from '../net/debug.js?v=21';
-import { parseRoomFromUrl } from '../net/protocol.js?v=21';
-import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=21';
+import { createGame } from '../game/engine.js?v=22';
+import { applyAISteering, tickAIAbilities, resetAIController } from '../input/ai.js?v=22';
+import { createBeySelection } from '../ui/selection.js?v=22';
+import { createPlaySetup } from '../ui/playSetup.js?v=22';
+import { queryGameUi } from '../ui/domRefs.js?v=22';
+import { createCampaignController } from '../game/campaignController.js?v=22';
+import { createOnlineController } from '../game/onlineController.js?v=22';
+import { createOnlineLobby } from '../ui/onlineLobby.js?v=22';
+import { createOnlineSelection } from '../ui/onlineSelection.js?v=22';
+import { createNetClient } from '../net/client.js?v=22';
+import { createInputBuffer } from '../net/inputBuffer.js?v=22';
+import { createNetDebug } from '../net/debug.js?v=22';
+import { parseRoomFromUrl } from '../net/protocol.js?v=22';
+import { GAME_MODES, isVsCpu, isOnline, modeBlurb } from '../game/modes.js?v=22';
 
 /**
  * Shared mobile/PC bootstrap: campaign, play setup, bey selection, and game wiring.
@@ -375,6 +375,10 @@ export function createAppBootstrap({
           restartLabel: btn?.textContent ?? '',
           restartDisabled: btn?.disabled ?? false,
           hasArenaBodies: !!(gameRef?.state.playerBody && gameRef?.state.aiBody),
+          hasTopVisuals: !!(
+            gameRef?.playerGroup?.children?.length &&
+            gameRef?.aiGroup?.children?.length
+          ),
           onlineActive: onlineCtrl.isActive(),
           onlineMotion: gameRef?.getOnlineMotionStats?.() ?? null,
           lastServerTick: Math.max(

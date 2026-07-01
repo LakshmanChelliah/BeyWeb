@@ -3215,7 +3215,10 @@ function findActiveStarBlast(state) {
 /** Stadium overview while Star Blast plays; eases back to normal tracking afterward. */
 export function getCameraCue(state, dt, mode) {
   const starBlast = findActiveStarBlast(state);
-  const koActive = !!state.pendingKo && !!koWinnerFocus(state);
+  const koActive =
+    !!state.pendingKo &&
+    (state.launchGrace ?? 0) <= 0 &&
+    !!koWinnerFocus(state);
 
   const stadiumTarget = starBlast ? 1 : 0;
   const stadiumRate = starBlast ? 6 : 3.5;
@@ -3250,14 +3253,15 @@ export function getCameraCue(state, dt, mode) {
   const focusZ = _camFocusZ * (1 - t);
   const cinematicActive =
     starBlast || koActive || t > 0.02 || _camSmoothLift > 0.35;
+  const launchGraceActive = (state.launchGrace ?? 0) > 0;
 
   const baseCamY = 24 + _camSmoothLift * 0.5;
   const baseCamZ = 20 + _camSmoothLift * 0.1;
   const baseLookY = _camSmoothLift * 0.38;
 
   return {
-    focusX: cinematicActive ? focusX : null,
-    focusZ: cinematicActive ? focusZ : null,
+    focusX: cinematicActive && !launchGraceActive ? focusX : null,
+    focusZ: cinematicActive && !launchGraceActive ? focusZ : null,
     camY: baseCamY + (STAR_BLAST_CAM_Y - baseCamY) * t,
     camZ: baseCamZ + (STAR_BLAST_CAM_Z - baseCamZ) * t,
     lookY: baseLookY + (STAR_BLAST_CAM_LOOK_Y - baseLookY) * t,
