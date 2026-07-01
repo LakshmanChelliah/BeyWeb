@@ -1,4 +1,4 @@
-import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=23';
+import { MSG, WINS_NEEDED, SERIES_MAX_ROUNDS } from '../net/protocol.js?v=24';
 import { getBeyOrDefault } from './beys.js';
 
 function winnerToSlot(winner) {
@@ -39,6 +39,8 @@ export function createOnlineController({
   let countdownArenaPrepared = false;
 
   let roundStartCommitted = false;
+  let matchConfigReceived = false;
+  let pendingCountdownGo = false;
   let readyStatusEl = document.getElementById('gameover-ready');
 
   function usesReadyGate() {
@@ -65,6 +67,8 @@ export function createOnlineController({
     countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
+    matchConfigReceived = false;
+    pendingCountdownGo = false;
     updateHud();
     updateRecalibrateVisibility();
   }
@@ -80,6 +84,8 @@ export function createOnlineController({
     countdownArenaPrepared = false;
     roundStartCommitted = false;
     rematchStartCommitted = false;
+    matchConfigReceived = false;
+    pendingCountdownGo = false;
     campaignHud?.classList.add('hidden');
     hideCountdown();
     paintReadyStatus();
@@ -217,6 +223,22 @@ export function createOnlineController({
     document.getElementById('countdown-overlay')?.classList.remove('visible', 'countdown-overlay--rip');
   }
 
+  function hasMatchBeys(gameRef) {
+    return matchConfigReceived || Boolean(
+      gameRef.state.playerBey?.id && gameRef.state.aiBey?.id
+    );
+  }
+
+  function isLiveArena(gameRef) {
+    const state = gameRef?.state;
+    return Boolean(
+      state?.gameRunning &&
+      !state?.gameFrozen &&
+      state?.playerBody &&
+      state?.aiBody
+    );
+  }
+
   function prepareCountdownArena(gameRef) {
     if (countdownArenaPrepared) return;
     countdownArenaPrepared = true;
@@ -275,31 +297,57 @@ export function createOnlineController({
     return true;
   }
 
+  function beginRoundFromCountdown(gameRef) {
+    showCountdown(0);
+    countdownArenaPrepared = false;
+    tryStartNextRound(gameRef);
+  }
+
+  function recoverArenaFromSnapshot(gameRef, msg) {
+    if (awaitingBothReady || !hasMatchBeys(gameRef)) return false;
+    if (isLiveArena(gameRef)) return false;
+    if (!msg.tick || msg.tick <= 0 || !msg.player || !msg.ai) return false;
+    if (gameRef.state.playerBody && gameRef.state.aiBody) return false;
+    return tryStartNextRound(gameRef);
+  }
+
   function wireNetHandlers(gameRef) {
     netClient.on(MSG.MATCH_CONFIG, (msg) => {
+      const resumeGo = pendingCountdownGo;
       const slot = netClient.slot ?? 0;
       start(slot);
       scores = msg.scores ?? [0, 0];
+      matchConfigReceived = true;
       gameRef.state.playerBey = getBeyOrDefault(msg.beyIds?.[0], 'pegasus');
       gameRef.state.aiBey = getBeyOrDefault(msg.beyIds?.[1], 'ldrago');
       updateHud();
+      if (resumeGo) beginRoundFromCountdown(gameRef);
     });
 
     netClient.on(MSG.COUNTDOWN, (msg) => {
       if (!canShowCountdown()) return;
 
       if (msg.seconds > 0) {
+        // Ignore stale/resync countdown ticks once the round is live — they wipe spawned beys.
+        if (isLiveArena(gameRef)) return;
         prepareCountdownArena(gameRef);
         showCountdown(msg.seconds);
         return;
       }
 
-      showCountdown(msg.seconds);
-      countdownArenaPrepared = false;
-      tryStartNextRound(gameRef);
+      if (isLiveArena(gameRef) && roundStartCommitted) return;
+
+      if (!hasMatchBeys(gameRef)) {
+        pendingCountdownGo = true;
+        showCountdown(msg.seconds);
+        return;
+      }
+
+      beginRoundFromCountdown(gameRef);
     });
 
     netClient.on(MSG.SNAPSHOT, (msg) => {
+      recoverArenaFromSnapshot(gameRef, msg);
       if (
         !awaitingBothReady &&
         !gameRef.state.gameRunning &&
@@ -440,6 +488,8 @@ export function createOnlineController({
       readyCount,
       localReady,
       roundStartCommitted,
+      matchConfigReceived,
+      pendingCountdownGo,
     };
   }
 
