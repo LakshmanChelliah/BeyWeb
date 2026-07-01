@@ -3173,6 +3173,8 @@ let _camFocusReady = false;
 
 function koWinnerFocus(state) {
   if (!state.pendingKo) return null;
+  const loser = state.pendingKo.loser === 1 ? state.playerBody : state.aiBody;
+  if (!loser?.userData?.ringOut) return null;
   const winner = state.pendingKo.loser === 1 ? state.aiBody : state.playerBody;
   if (!winner) return null;
   return { x: winner.position.x, z: winner.position.z };
@@ -3213,7 +3215,7 @@ function findActiveStarBlast(state) {
 /** Stadium overview while Star Blast plays; eases back to normal tracking afterward. */
 export function getCameraCue(state, dt, mode) {
   const starBlast = findActiveStarBlast(state);
-  const koActive = !!state.pendingKo;
+  const koActive = !!state.pendingKo && !!koWinnerFocus(state);
 
   const stadiumTarget = starBlast ? 1 : 0;
   const stadiumRate = starBlast ? 6 : 3.5;

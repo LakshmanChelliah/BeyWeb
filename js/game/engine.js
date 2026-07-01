@@ -311,8 +311,17 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     handleNetEvents(msg.events);
   }
 
+  function snapArenaCameraToCenter() {
+    resetStarBlastCamera();
+    snapArenaCamera(camera, { playerBody: null, aiBody: null }, mode);
+  }
+
   function startOnlineRound() {
     if (!state.playerBody) spawnTops();
+    else {
+      resetStarBlastCamera();
+      snapArenaCamera(camera, state, mode);
+    }
     netInterpolator.reset();
     onlineCollisionSync.reset();
     pendingCollisionEvents.length = 0;
@@ -363,6 +372,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     dom.controlsHint?.classList.remove('visible');
     dom.gameoverOverlay.classList.remove('visible');
     dom.specialFlash?.classList.remove('flash-play');
+    snapArenaCameraToCenter();
   }
 
   function endOnlineRound() {
@@ -404,6 +414,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     dom.hud.classList.remove('visible');
     dom.controlsHint?.classList.remove('visible');
     dom.specialFlash?.classList.remove('flash-play');
+    snapArenaCameraToCenter();
   }
 
   function abilityKeyLabels() {
@@ -1041,6 +1052,7 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     },
     endOfflineMatch: endGame,
     tearDownOnlineMatch,
+    snapArenaCameraToCenter,
     setNetRtt(ms) {
       netInterpolator.setRtt(ms);
     },

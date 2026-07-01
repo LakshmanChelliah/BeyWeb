@@ -286,12 +286,14 @@ export function createAppBootstrap({
 
       if (isOnline(gameMode)) {
         input?.prepareOnline?.();
+        gameRef?.snapArenaCameraToCenter?.();
         startOnlineFlow();
       } else {
         onlineStarted = false;
         netClient.close();
         clearRoomFromUrl();
         showOnlineFlow(false);
+        gameRef?.snapArenaCameraToCenter?.();
         selection?.reset(getPlayers(), { keepCarousel: true });
         selection?.setRivalLabel(getRivalLabel());
       }

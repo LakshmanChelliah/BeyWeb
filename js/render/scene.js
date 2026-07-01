@@ -109,14 +109,11 @@ export function resetMobileCameraFraming() {
   _lookReady = false;
 }
 
-/** Snap camera to the arena after ring-out / ability cinematics so the next round is visible immediately. */
-export function snapArenaCamera(camera, state, mode) {
-  resetMobileCameraFraming();
-
+function arenaCameraPose(camera, state, mode) {
   const inArena = arenaTopPositions(state);
   let midX = 0;
   let midZ = 0;
-  if (mode === 'pc' && state.playerBody && state.aiBody) {
+  if (state.playerBody && state.aiBody) {
     midX = (state.playerBody.position.x + state.aiBody.position.x) * 0.5;
     midZ = (state.playerBody.position.z + state.aiBody.position.z) * 0.5;
   } else if (inArena.length > 0) {
@@ -128,7 +125,30 @@ export function snapArenaCamera(camera, state, mode) {
     midZ = state.playerBody.position.z;
   }
 
-  camera.position.set(midX, 24, midZ + 20);
+  let camY = 24;
+  let camZ = 20;
+  if (mode === 'mobile') {
+    const span = framingSpan(inArena, 11);
+    const aspect = camera.aspect;
+    const aspectScale = aspect < 0.62 ? 1.55 : aspect < 0.85 ? 1.25 : 1.0;
+    const targetPull = Math.max(0, (span - 7) * 1.15 * aspectScale);
+    _mobileFramePull = targetPull;
+    camY += targetPull * 0.44;
+    camZ += targetPull;
+  } else {
+    _mobileFramePull = 0;
+  }
+
+  return { midX, midZ, camY, camZ };
+}
+
+/** Snap camera to the arena after ring-out / ability cinematics so the next round is visible immediately. */
+export function snapArenaCamera(camera, state, mode) {
+  resetMobileCameraFraming();
+
+  const { midX, midZ, camY, camZ } = arenaCameraPose(camera, state, mode);
+
+  camera.position.set(midX, camY, midZ + camZ);
   _lookX = midX;
   _lookZ = midZ;
   _lookY = 0;
@@ -143,7 +163,10 @@ export function updateCamera(camera, state, mode, cameraCue = 0) {
   const lift = Math.min(cue.lift ?? 0, 45);
   const stabilized = cue.stabilized ?? false;
   const koCinematic = cue.koCinematic ?? false;
-  const lerp = koCinematic ? 0.025 : stabilized ? 0.04 : lift > 0.5 ? 0.12 : 0.06;
+  let lerp = koCinematic ? 0.025 : stabilized ? 0.04 : lift > 0.5 ? 0.12 : 0.06;
+  if (state.launchGrace > 0 && !koCinematic) {
+    lerp = Math.max(lerp, 0.2);
+  }
 
   const camY = cue.camY ?? 24 + lift * 0.5;
   const lookY = cue.lookY ?? lift * 0.38;
