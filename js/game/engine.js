@@ -24,8 +24,8 @@ import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera, resetMobileCameraFraming, snapArenaCamera } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
-import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js';
-import { beyColorHex, getBeyOrDefault } from './beys.js?v=22';
+import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js?v=23';
+import { beyColorHex, getBeyOrDefault } from './beys.js?v=23';
 import {
   createAbilityRuntime,
   triggerAbility as triggerAbilityCore,
@@ -46,7 +46,7 @@ import {
   isLibraBusterChannelingBody,
   SPECIAL_LOGO_FLASH_DUR,
   ABILITY_REGISTRY,
-} from './abilities.js?v=22';
+} from './abilities.js?v=23';
 import { stepSimulation } from './simulation.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';

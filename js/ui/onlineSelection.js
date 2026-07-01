@@ -1,7 +1,7 @@
-import { BEYS, isBeyPlayable } from '../game/beys.js?v=22';
+import { BEYS, isBeyPlayable } from '../game/beys.js?v=23';
 import { assetUrl } from '../app/basePath.js';
 import { renderBeyPackagingStars } from './beyPackagingStars.js';
-import { MSG } from '../net/protocol.js?v=22';
+import { MSG } from '../net/protocol.js?v=23';
 
 /**
  * Online bey selection: carousel for your pick + opponent ready status.

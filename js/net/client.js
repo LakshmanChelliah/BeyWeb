@@ -1,4 +1,4 @@
-import { MSG, wsUrl, parseRoomFromUrl } from './protocol.js?v=22';
+import { MSG, wsUrl, parseRoomFromUrl } from './protocol.js?v=23';
 
 /**
  * Browser WebSocket client for online multiplayer.

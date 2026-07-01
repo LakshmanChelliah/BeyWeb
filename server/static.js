@@ -38,10 +38,10 @@ const VENDOR_PREFIX = {
   '/vendor/three/examples/jsm/': 'node_modules/three/examples/jsm/',
 };
 
-/** Game code must revalidate after deploys; large media can stay cached. */
+/** Game code must not be cached at CDN edges — unversioned module URLs break after deploys. */
 function cacheControlFor(ext) {
   if (ext === '.html' || ext === '.js' || ext === '.mjs' || ext === '.css' || ext === '.json') {
-    return 'no-cache, must-revalidate';
+    return 'no-store';
   }
   return 'public, max-age=86400';
 }
