@@ -1,6 +1,6 @@
 import { createGyroInput } from './input/gyro.js';
 import { applyAISteering, tickAIAbilities } from './input/ai.js';
-import { createAppBootstrap } from './app/bootstrap.js?v=25';
+import { createAppBootstrap } from './app/bootstrap.js?v=26';
 import { modeBlurb } from './game/modes.js';
 import { createRemoteInput } from './net/remoteInput.js';
 

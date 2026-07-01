@@ -1,4 +1,4 @@
-import { MSG, wsUrl, parseRoomFromUrl } from './protocol.js?v=23';
+import { MSG, wsUrl, parseRoomFromUrl } from './protocol.js?v=26';
 
 /**
  * Browser WebSocket client for online multiplayer.
@@ -78,9 +78,12 @@ export function createNetClient({ onMessage, onStatus } = {}) {
     };
   }
 
-  async function createRoom() {
+  async function createRoom({ reclaimRoomId = null } = {}) {
     await connect();
-    send({ type: MSG.CREATE_ROOM });
+    send({
+      type: MSG.CREATE_ROOM,
+      ...(reclaimRoomId ? { reclaimRoomId } : {}),
+    });
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         offOk();

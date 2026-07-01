@@ -18,6 +18,7 @@
     "test:snapshot": "node scripts/test-snapshot-roundtrip.mjs",
     "test:server-tick": "node scripts/test-server-tick.mjs",
     "test:ws-smoke": "node scripts/test-ws-smoke.mjs",
+    "test:room-persistence": "node scripts/test-room-persistence.mjs",
     "test:ready-gate": "node scripts/test-ready-gate.mjs",
     "test:next-round": "node scripts/test-next-round-flow.mjs",
     "test:forfeit-lobby": "node scripts/test-forfeit-lobby-wait.mjs",
@@ -31,7 +32,7 @@
     "dev:server": "node server/index.js",
     "dev:static": "npx serve . -p 3000",
     "dev:online": "npx concurrently \"npm run dev:server\" \"npm run dev:static\"",
-    "test": "npm run test:snapshot && npm run test:server-tick && npm run test:ws-smoke && npm run test:ready-gate && npm run test:next-round && npm run test:forfeit-lobby && npm run test:interp-smoothness && npm run test:static-cache"
+    "test": "npm run test:snapshot && npm run test:server-tick && npm run test:ws-smoke && npm run test:room-persistence && npm run test:ready-gate && npm run test:next-round && npm run test:forfeit-lobby && npm run test:interp-smoothness && npm run test:static-cache"
   },
   "keywords": [],
   "author": "",

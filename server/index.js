@@ -2,19 +2,49 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { Room } from './Room.js';
 import { tryServeStatic } from './static.js';
-import { MSG, SERVER_PORT, generateRoomId } from '../js/net/protocol.js';
+import {
+  MSG,
+  SERVER_PORT,
+  generateRoomId,
+  isValidRoomId,
+  ROOM_EMPTY_TTL_MS,
+} from '../js/net/protocol.js';
 
 const rooms = new Map();
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const roomDeleteTimers = new Map();
+
+function cancelRoomDeletion(roomId) {
+  const timer = roomDeleteTimers.get(roomId);
+  if (timer) {
+    clearTimeout(timer);
+    roomDeleteTimers.delete(roomId);
+  }
+}
+
+function scheduleRoomDeletion(roomId) {
+  cancelRoomDeletion(roomId);
+  const timer = setTimeout(() => {
+    roomDeleteTimers.delete(roomId);
+    const room = rooms.get(roomId);
+    if (room && !room.slots[0] && !room.slots[1]) {
+      rooms.delete(roomId);
+    }
+  }, ROOM_EMPTY_TTL_MS);
+  roomDeleteTimers.set(roomId, timer);
+}
 
 function findRoomForJoin(roomId) {
   return rooms.get(roomId?.toUpperCase());
 }
 
-function createRoom() {
-  let id;
-  do {
-    id = generateRoomId();
-  } while (rooms.has(id));
+function registerRoom(room) {
+  rooms.set(room.id, room);
+  cancelRoomDeletion(room.id);
+  return room;
+}
+
+function makeRoom(id) {
   const room = new Room(id, (msg) => {
     for (const ws of room.slots) {
       if (ws?.readyState === 1) {
@@ -22,8 +52,29 @@ function createRoom() {
       }
     }
   });
-  rooms.set(id, room);
-  return room;
+  return registerRoom(room);
+}
+
+function createRoom() {
+  let id;
+  do {
+    id = generateRoomId();
+  } while (rooms.has(id));
+  return makeRoom(id);
+}
+
+function reclaimOrCreateRoom(reclaimId) {
+  const id = reclaimId.toUpperCase();
+  if (!isValidRoomId(id)) return null;
+
+  const existing = rooms.get(id);
+  if (existing) {
+    if (existing.slots[0] || existing.slots[1]) return null;
+    cancelRoomDeletion(id);
+    return existing;
+  }
+
+  return makeRoom(id);
 }
 
 function assignSlot(room) {
@@ -53,13 +104,31 @@ function attachWss(httpServer) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: 'Already in a room' }));
           return;
         }
-        const room = createRoom();
+
+        const reclaimId = msg.reclaimRoomId?.toUpperCase?.();
+        let room;
+        let reclaimed = false;
+        if (reclaimId) {
+          room = reclaimOrCreateRoom(reclaimId);
+          if (!room) {
+            ws.send(JSON.stringify({
+              type: MSG.ERROR,
+              message: 'Room already in use — create a new room instead',
+            }));
+            return;
+          }
+          reclaimed = true;
+        } else {
+          room = createRoom();
+        }
+
         const slot = 0;
         room.addPlayer(ws, slot);
         ws.send(JSON.stringify({
           type: MSG.ROOM_CREATED,
           roomId: room.id,
           slot,
+          reclaimed,
         }));
         return;
       }
@@ -68,9 +137,13 @@ function attachWss(httpServer) {
         if (ws.room) return;
         const room = findRoomForJoin(msg.roomId);
         if (!room) {
-          ws.send(JSON.stringify({ type: MSG.ERROR, message: 'Room not found' }));
+          ws.send(JSON.stringify({
+            type: MSG.ERROR,
+            message: 'Room not found — ask the host to create a new room or check the link',
+          }));
           return;
         }
+        cancelRoomDeletion(room.id);
         const slot = assignSlot(room);
         if (slot < 0) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: 'Room full' }));
@@ -103,6 +176,7 @@ function attachWss(httpServer) {
             ws.slot = msg.slot;
             ws.room = room;
             room.slots[msg.slot] = ws;
+            cancelRoomDeletion(room.id);
             room.handleMessage(ws, msg);
           }
         }
@@ -111,9 +185,10 @@ function attachWss(httpServer) {
 
     ws.on('close', () => {
       if (ws.room) {
+        const roomId = ws.room.id;
         ws.room.removePlayer(ws);
         if (!ws.room.slots[0] && !ws.room.slots[1]) {
-          rooms.delete(ws.room.id);
+          scheduleRoomDeletion(roomId);
         }
       }
     });

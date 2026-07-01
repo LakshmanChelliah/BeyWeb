@@ -16,7 +16,7 @@
       else if (/\/[^/]+\.html$/i.test(p)) p = p.replace(/\/[^/]+\.html$/i, '');
       if (!p.endsWith('/')) p += '/';
       window.__BEYWEB_BASE__ = p === '/' ? '' : p.replace(/\/$/, '');
-      window.__BEYWEB_ASSET_V__ = '25';
+      window.__BEYWEB_ASSET_V__ = '26';
       if (location.hostname.endsWith('github.io')) {
         window.__BEYWEB_WS__ = 'wss://beyweb-production.up.railway.app';
       }
