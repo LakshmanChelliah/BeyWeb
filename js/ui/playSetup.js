@@ -1,5 +1,6 @@
 import { GAME_MODES } from '../game/modes.js';
 import { AI_DIFFICULTIES } from '../input/ai.js';
+import { CAMPAIGN_STAGE_COUNT } from '../game/campaign.js';
 
 /**
  * Mode + difficulty controls rendered inside the bey-select overlay (touch-friendly).
@@ -76,7 +77,7 @@ export function createPlaySetup(el, { show2Player = false, showOnline = true, on
         hintEl.textContent = 'Host: share code or link · Guest: enter room code or open invite link';
         hintEl.classList.remove('hidden');
       } else if (mode === GAME_MODES.TOURNAMENT) {
-        hintEl.textContent = 'Five rivals in order.';
+        hintEl.textContent = `${CAMPAIGN_STAGE_COUNT} rivals in order.`;
         hintEl.classList.remove('hidden');
       } else if (isCasual) {
         hintEl.textContent = 'CPU rival is random each match';

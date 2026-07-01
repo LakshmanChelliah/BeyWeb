@@ -1,4 +1,6 @@
 /** PC / mobile play modes. */
+import { CAMPAIGN_STAGE_COUNT } from './campaign.js';
+
 export const GAME_MODES = Object.freeze({
   CASUAL: 'casual',
   TOURNAMENT: 'tournament',
@@ -19,7 +21,7 @@ export function modeBlurb(mode) {
     case GAME_MODES.CASUAL:
       return 'Casual: pick your bey and CPU difficulty. Face a random rival each match.';
     case GAME_MODES.TOURNAMENT:
-      return 'Tournament: best of 3 vs five rivals in rising order.';
+      return `Tournament: best of 3 vs ${CAMPAIGN_STAGE_COUNT} rivals in rising order.`;
     case GAME_MODES.ONLINE:
       return 'Online: invite a friend, lock in your bey, best of 5 (first to 3) real-time battle.';
     default:
