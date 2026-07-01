@@ -24,8 +24,8 @@ import { createGameState, resetRoundState } from './state.js';
 import { evaluateWin, trackSleepers, formatEndGame } from './rules.js';
 import { createScene, updateCamera, resetMobileCameraFraming, snapArenaCamera } from '../render/scene.js';
 import { createArenaMesh } from '../render/arena.js';
-import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js?v=23';
-import { beyColorHex, getBeyOrDefault } from './beys.js?v=23';
+import { createTopGroups, loadTopModel, setTopEmissive, invalidateTopModelLoads } from '../render/top.js?v=25';
+import { beyColorHex, getBeyOrDefault } from './beys.js?v=25';
 import {
   createAbilityRuntime,
   triggerAbility as triggerAbilityCore,
@@ -46,7 +46,7 @@ import {
   isLibraBusterChannelingBody,
   SPECIAL_LOGO_FLASH_DUR,
   ABILITY_REGISTRY,
-} from './abilities.js?v=23';
+} from './abilities.js?v=25';
 import { stepSimulation } from './simulation.js';
 import { createStarBlastVfx } from '../render/starBlastVfx.js';
 import { createLeoneAbilityVfx } from '../render/leoneAbilityVfx.js';
@@ -297,9 +297,25 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
     pendingCollisionEvents.length = 0;
   }
 
+  function needsArenaRecovery(msg) {
+    return (
+      onlineActive() &&
+      msg.tick > 0 &&
+      msg.player &&
+      msg.ai &&
+      (!state.playerBody || !state.aiBody)
+    );
+  }
+
   function applyNetSnapshot(msg) {
-    if (onlineActive() && input.isAwaitingRoundReady?.()) return;
-    if (onlineActive() && !state.gameRunning && state.gameFrozen && !state.pendingKo) return;
+    if (onlineActive() && input.isAwaitingRoundReady?.() && !needsArenaRecovery(msg)) return;
+    if (
+      onlineActive() &&
+      !state.gameRunning &&
+      state.gameFrozen &&
+      !state.pendingKo &&
+      !needsArenaRecovery(msg)
+    ) return;
     if (msg.tick != null) {
       if (msg.tick <= lastServerTick) return;
       // Drop buffered snapshots from the previous round (server tick resets after countdown).

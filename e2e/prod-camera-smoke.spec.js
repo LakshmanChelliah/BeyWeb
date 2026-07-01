@@ -67,12 +67,17 @@ test.describe('Production camera smoke', () => {
     await waitForArenaVisible(page, 'casual match 2');
   });
 
-  test('mobile online round start keeps stadium in frame', async ({ browser }) => {
+  test('mobile online round start keeps stadium in frame for both players', async ({ browser }) => {
     const { host, guest, hostContext, guestContext } = await mobileHostGuestPair(browser);
     try {
       await setupMobileOnlineMatch(host, guest);
       await host.waitForTimeout(3000);
-      await waitForArenaVisible(host, 'online round 1 host');
+      for (const [page, label] of [[host, 'host'], [guest, 'guest']]) {
+        const state = await page.evaluate(() => window.__BEYWEB_E2E__.getState());
+        expect(state.hasArenaBodies, `${label} bodies`).toBe(true);
+        expect(state.hasTopVisuals, `${label} visuals`).toBe(true);
+        await waitForArenaVisible(page, `online round 1 ${label}`);
+      }
     } finally {
       await hostContext.close();
       await guestContext.close();
