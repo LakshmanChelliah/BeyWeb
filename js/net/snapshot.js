@@ -112,7 +112,12 @@ export function applySnapshot(state, snap, localSlot = 0) {
   state.aiSpin = snap.aiSpin;
   state.launchGrace = snap.launchGrace;
   state.gameFrozen = snap.gameFrozen ?? false;
-  state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;
+  // Ignore stale KO metadata while launch grace is active on a fresh round.
+  if (snap.launchGrace > 0) {
+    state.pendingKo = null;
+  } else {
+    state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;
+  }
 
   applyBodyData(state.playerBody, snap.player);
   applyBodyData(state.aiBody, snap.ai);
@@ -135,7 +140,12 @@ export function applySnapshotMeta(state, snap) {
   state.aiSpin = snap.aiSpin;
   state.launchGrace = snap.launchGrace;
   state.gameFrozen = snap.gameFrozen ?? false;
-  state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;
+  // Ignore stale KO metadata while launch grace is active on a fresh round.
+  if (snap.launchGrace > 0) {
+    state.pendingKo = null;
+  } else {
+    state.pendingKo = snap.pendingKo ? { ...snap.pendingKo } : null;
+  }
 
   if (snap.abilities && state.abilities) {
     applyAbilitySlot(state.abilities.player?.power, snap.abilities.player?.power);
