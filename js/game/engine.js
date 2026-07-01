@@ -800,7 +800,12 @@ export function createGame({ mode, canvas, ui, input, isVsCpu, isOnline, getLoca
   function returnToMenu() {
     state.gameRunning = false;
     state.gameFrozen = false;
+    resetStarBlastCamera();
+    resetMobileCameraFraming();
     resetAllAbilityVfx();
+    if (state.playerBody) {
+      snapArenaCamera(camera, state, mode);
+    }
     dom.gameoverOverlay.classList.remove('visible');
     dom.hud.classList.remove('visible');
     dom.controlsHint?.classList.remove('visible');
