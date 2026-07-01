@@ -14,7 +14,7 @@ test.describe('PC offline UI', () => {
 
   test('mode tabs show correct panels and hints', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Tournament' })).toHaveClass(/active/);
-    await expect(page.getByText('Eight rivals in order.')).toBeVisible();
+    await expect(page.getByText('8 rivals in order.')).toBeVisible();
 
     await clickMode(page, 'Casual');
     await expect(page.locator('.play-setup-diff-label')).toBeVisible();
