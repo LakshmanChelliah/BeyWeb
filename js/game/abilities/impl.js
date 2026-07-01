@@ -3246,14 +3246,16 @@ export function getCameraCue(state, dt, mode) {
   const t = _camStadiumT;
   const focusX = _camFocusX * (1 - t);
   const focusZ = _camFocusZ * (1 - t);
+  const cinematicActive =
+    starBlast || koActive || t > 0.02 || _camSmoothLift > 0.35;
 
   const baseCamY = 24 + _camSmoothLift * 0.5;
   const baseCamZ = 20 + _camSmoothLift * 0.1;
   const baseLookY = _camSmoothLift * 0.38;
 
   return {
-    focusX,
-    focusZ,
+    focusX: cinematicActive ? focusX : null,
+    focusZ: cinematicActive ? focusZ : null,
     camY: baseCamY + (STAR_BLAST_CAM_Y - baseCamY) * t,
     camZ: baseCamZ + (STAR_BLAST_CAM_Z - baseCamZ) * t,
     lookY: baseLookY + (STAR_BLAST_CAM_LOOK_Y - baseLookY) * t,

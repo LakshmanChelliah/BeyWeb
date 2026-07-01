@@ -103,6 +103,9 @@ let _lookReady = false;
 
 export function resetMobileCameraFraming() {
   _mobileFramePull = 0;
+  _lookX = 0;
+  _lookZ = 0;
+  _lookY = 0;
   _lookReady = false;
 }
 
@@ -130,6 +133,7 @@ export function snapArenaCamera(camera, state, mode) {
   _lookZ = midZ;
   _lookY = 0;
   _lookReady = true;
+  camera.lookAt(_lookX, _lookY, _lookZ);
 }
 
 export function updateCamera(camera, state, mode, cameraCue = 0) {
